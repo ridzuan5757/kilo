@@ -6,8 +6,22 @@ struct termios orig_termios;
 
 /**
  * Disabling raw mode.
+ *
+ * To restore the terminal's orignal attributes when the program exits. This is
+ * done by saving a copy of `termios` struct in its original state, and use
+ * `tcsetattr()` to apply it to the terminal when the program exits.
  */
-void disableRawMode(void) { tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios); }
+void disableRawMode(void) {
+
+  /**
+   * As `TCSAFLUSH` option being passed to `tcsetattr()` when the program exits,
+   * the leftover input will be no longer fed into the shell after the program
+   * quit.
+   *
+   * It discards any unread input before applying change to the terminal.
+   */
+  tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+}
 
 /**
  * Turning off echo
@@ -50,10 +64,30 @@ void disableRawMode(void) { tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios); }
  *  while every other bit to retain its current value.
  */
 void enableRawMode(void) {
+  /**
+   * `atexit()` comes from `<stdlib.h>`. We use it to register the
+   * `disableRawMode()` function to be called automatically when the program
+   * exits, whether it exits by returning from `main()` or by calling the
+   * `exit()` function. This way we can ensure we will leave the terminal
+   * attriubtes the way we found them when the program exits.
+   */
   tcgetattr(STDIN_FILENO, &orig_termios);
   atexit(disableRawMode);
 
+  /**
+   * We store the original terminal attributes in a global variable,
+   * `orig_termios`. We then assign the `orig_termios` struct to the `raw`
+   * struct in order to make a copy of it before we start making our change.
+   */
   struct termios raw = orig_termios;
+
+  /**
+   * There is `ICANON` flag that allows us to turn off canonical model. This
+   * means we will finally be reading input byte-byte-byte, instead of
+   * line-by-line.
+   *  - OLD: raw.c_lflag &= ~ECHO
+   *  - NEW: raw.c_flag &= ~(ECHO | ICANON)
+   */
   raw.c_lflag &= ~ECHO;
   tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
