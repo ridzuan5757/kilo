@@ -82,13 +82,21 @@ void enableRawMode(void) {
   struct termios raw = orig_termios;
 
   /**
+   * Canonical mode control
+   *
    * There is `ICANON` flag that allows us to turn off canonical model. This
    * means we will finally be reading input byte-byte-byte, instead of
    * line-by-line.
    *  - OLD: raw.c_lflag &= ~ECHO
    *  - NEW: raw.c_flag &= ~(ECHO | ICANON)
+   *
+   *
+   * `ICANON` comes from `<termios.h>`. Input flags (the ones in the `c_iflag`
+   * field) generally start with `I` like `ICANON` does. However, `ICANON` is
+   * not an input flag, it is a local flag in `c_lflag` field. Now the program
+   * will quit as soon as `q` is pressed.
    */
-  raw.c_lflag &= ~ECHO;
+  raw.c_lflag &= ~(ECHO | ICANON);
   tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
 
