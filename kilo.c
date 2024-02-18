@@ -1,3 +1,5 @@
+#include <ctype.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <termios.h>
 #include <unistd.h>
@@ -145,8 +147,57 @@ int main(void) {
    * the `q` will be leaft unread on the input queue, and we may see that
    * input being fed into the sell after the program exits.
    */
-  while (read(STDIN_FILENO, &c, 1) == 1 && c != 'q')
-    ;
+  while (read(STDIN_FILENO, &c, 1) == 1 && c != 'q') {
+
+    /**
+     * keypress
+     *
+     * To get better idea of how input in raw mode works, lets print out each
+     * byte that we `read()`. We will print each character's numeric ASCII
+     * value, as well as character it represents if it is a printable character.
+     *
+     * `iscntrl()` comes from `<ctype.h>`, and `printf()` comes from
+     * `<stdio.h>`.
+     *    - `iscntrl()` tests whether a character is a control character.
+     *    Control characters are non-printable characters that we don't want to
+     *    print to the screen. ASCII codes 0 to 31 are all control characters as
+     *    well as code 127. ASCII codes 32 to 126 are all printable.
+     *    - `printf()` can print multiple representations of a byte. `%d` tells
+     *    it to format the byte as a decimal number (its ASCII code), and `%c`
+     *    tells it to write out the byte directly as a character.
+     *
+     * This is now a very useful program. It shows us how various keypress
+     * translate into the bytes we read. Most ordinary keys translate directly
+     * into the characters they represent.
+     *    - Arrows keys, `Page Up`, `Page Down`, `Home`, and `End` all input 3
+     *    or 4 bytes to terminal: `27`, `[`, and then one or two characters.
+     *    This is known as escape secuence. All escape sequences start with a
+     *    `27` byte.
+     *    - Pressing `Escape` sends a single 27 byte as input.
+     *    - `Backspace` is byte 127.
+     *    - `Delete` is a 4 byte escape sequence.
+     *    - `Enter` is byte 10, which is a newline character, also known as
+     *    `\n`.
+     *    - `Ctrl-A` is `1`, `Ctrl-B` is `2`. This would means that `Ctrl` key
+     *    combinations that do work map the letter A-Z to the codes 1-26.
+     *
+     * Pressing `Ctrl-S` will cause the program to freeze. What is actually
+     * happened is that we have asked the program to stop sending us output.
+     * Pressing `Ctrl-Q` tell the program to resume sending the output.
+     *
+     * Pressing `Ctrl-Z`, or `Ctrl-Y` on some machine will cause the program to
+     * be suspended to the background. `fg` command will bring it back to the
+     * foreground, but it may quit immediately after we do that, as a result of
+     * `read()` returning `-1` to indicate that an error occured. This is
+     * happening on macOS while Linux seems able to resume the `read()` call
+     * properly.
+     */
+    if (iscntrl(c)) {
+      printf("%d\n", c);
+    } else {
+      printf("%d ('%c')\n", c, c);
+    }
+  }
 
   /**
    * Running `echo $?` after the program finishes running will return the
