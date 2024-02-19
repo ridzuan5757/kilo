@@ -118,6 +118,7 @@ void enableRawMode(void) {
    * will quit as soon as `q` is pressed.
    *
    *
+   *
    * SIGINT signal control
    *
    * By default, `Ctrl-C` sends a `SIGINT` to the current process which cause it
@@ -129,8 +130,24 @@ void enableRawMode(void) {
    *  - This also disables `Ctrl-Y` on macOS, which is like `Ctrl-Z` except it
    *  waits for the program to read input before suspending it.
    *
+   *
+   *
+   * Implementation-defined input processing control
+   *
+   * On some systems, when we type `Ctrl-V`, the terminal waits for us to type
+   * another character and then sends that character literally. For example,
+   * before we disabled `Ctrl-C`, we might have been able to type `Ctrl-V` and
+   * then `Ctrl-C` to input 3 byte. We can turn off this feature using the
+   * `IEXTEN` flag. Turning off `IEXTEN` also fixes `Ctrl-O` in macOS, whose
+   * terminal driver is otherwise set to discard that control character.
+   * `IEXTEN` comes from `<termios.h>`. Now that `Ctrl-V` disabled, it can be
+   * printed as 22 byte and `Ctrl-O` as 15 byte.
+   *  - With `IEXTEN` eanbled, the terminal driver might perform additional
+   *  processing on input characters beyond basic character transmission. It
+   *  might interpret certain input sequences as commands rather than passing
+   *  them directly to the application. (Like how `:` works on vim.)
    */
-  raw.c_lflag &= ~(ECHO | ICANON | ISIG);
+  raw.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN);
   tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
 
