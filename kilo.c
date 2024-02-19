@@ -84,6 +84,25 @@ void enableRawMode(void) {
   struct termios raw = orig_termios;
 
   /**
+   * Software flow control
+   *
+   * By default, `Ctrl-S` and `Ctrl-Q` are used for software flow control.
+   * `Ctrl-S` stops data from being transmitted to the terminal until `Ctrl-Q`
+   * is pressed. This originates in the days when we might want to pause the
+   * transmission of data to let a device such as printer to catch up.
+   *
+   * `IXON` comes from `<termios.h>`. The `I` stands for input flag and `XON`
+   * comes from the names of the two control characters that `Ctrl-S` and
+   * `Ctrl-Q` produce: `XOFF` to pause transmission and `XON` to resume
+   * transmission.
+   *
+   * With `ISIG` disabled:
+   *  - `Ctrl-S` can be read as 19 byte data.
+   *  - `Ctrl-Q` can be read as 17 byte data.
+   */
+  raw.c_iflag &= ~(IXON);
+
+  /**
    * Canonical mode control
    *
    * There is `ICANON` flag that allows us to turn off canonical model. This
