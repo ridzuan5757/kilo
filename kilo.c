@@ -99,8 +99,25 @@ void enableRawMode(void) {
    * With `ISIG` disabled:
    *  - `Ctrl-S` can be read as 19 byte data.
    *  - `Ctrl-Q` can be read as 17 byte data.
+   *
+   *
+   *
+   * Carriage return and New line control
+   *
+   * If we run the program now and go through the whole alphabet while holding
+   * down `Ctrl`, we should see that we have every letter except `M`. `Ctrl-M`
+   * is weird: it is being read as 10, when we expect it to be read as 13, since
+   * it is the 13th letter of the alphabet, and `Ctrl-J` already produces 10.
+   * `Enter` key also produces byte value `10`.
+   *
+   * It turns out that the terminal is helfully translating any carriage returns
+   * (13, '\r') inputted by the user into newlines (10, '\n'). This can be
+   * controlled using `ICRNL` flag. `ICRNL` flag comes from `<termios.h>`. The
+   * `I` stands for input flag, `CR` stands for carriage return and `NL` stands
+   * for new line. This way `Ctrl-M` is read as `13` (carriage return) as well
+   * as `Enter` key.
    */
-  raw.c_iflag &= ~(IXON);
+  raw.c_iflag &= ~(IXON | ICRNL);
 
   /**
    * Canonical mode control
