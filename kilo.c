@@ -120,6 +120,32 @@ void enableRawMode(void) {
   raw.c_iflag &= ~(IXON | ICRNL);
 
   /**
+   * Output processing control
+   *
+   * Terminal des a similar translation on the output side. It translate each
+   * newline `\n` printed into a carriage return followerd by a newline `\r\n`.
+   * The terminalr requires both of these characters in order to start a new
+   * line of text. The carriage return moves the cursor back to the beginning of
+   * the current line, and the newline moves the cursor down a line, scrolling
+   * the screen if necessary. (These two distinct operations originated in the
+   * days of typewriter and teletypes.
+   *
+   * We will turn off all output procefssing features by turning off the `OPOST`
+   * flag. In practice, the `\n` to `\r\n` translation is liekly the only output
+   * processing feature turned on by default.
+   *
+   * `OPOST` comes from `<termios.h>. `O` means it is an output flag and `POST`
+   * stands for post-processing of output. If we run the program now we will see
+   * that the newline characters we are printing are only moving the cursor down
+   * instead of pushing the cursor all the way to the left side.
+   *
+   * This can be fixed by adding carriage return to every print statement. This
+   * also means that now we always have to write out the full `\r\n` whenever we
+   * want to start a new line.
+   */
+  raw.c_oflag &= ~(OPOST);
+
+  /**
    * Canonical mode control
    *
    * There is `ICANON` flag that allows us to turn off canonical model. This
@@ -259,9 +285,9 @@ int main(void) {
      * properly.
      */
     if (iscntrl(c)) {
-      printf("%d\n", c);
+      printf("%d\r\n", c);
     } else {
-      printf("%d ('%c')\n", c, c);
+      printf("%d ('%c')\r\n", c, c);
     }
   }
 
