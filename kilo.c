@@ -97,8 +97,21 @@ void enableRawMode(void) {
    * field) generally start with `I` like `ICANON` does. However, `ICANON` is
    * not an input flag, it is a local flag in `c_lflag` field. Now the program
    * will quit as soon as `q` is pressed.
+   *
+   *
+   * SIGINT signal control
+   *
+   * By default, `Ctrl-C` sends a `SIGINT` to the current process which cause it
+   * to terminate, and `Ctrl-Z` sends a `SIGTSTP` to the current process which
+   * causes it to suspend. This can be controlled using `ISIG` flag from
+   * termios. This way `Ctrl-C` and `Ctrl-Z` will be read as byte instead.
+   *  - `Ctrl-C` can be read as 3 byte.
+   *  - `Ctrl-Z` can be read as a 26 byte.
+   *  - This also disables `Ctrl-Y` on macOS, which is like `Ctrl-Z` except it
+   *  waits for the program to read input before suspending it.
+   *
    */
-  raw.c_lflag &= ~(ECHO | ICANON);
+  raw.c_lflag &= ~(ECHO | ICANON | ISIG);
   tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
 
