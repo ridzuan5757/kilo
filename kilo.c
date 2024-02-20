@@ -117,7 +117,27 @@ void enableRawMode(void) {
    * for new line. This way `Ctrl-M` is read as `13` (carriage return) as well
    * as `Enter` key.
    */
-  raw.c_iflag &= ~(IXON | ICRNL);
+  raw.c_iflag &= ~(IXON | ICRNL | BRKINT | INPCK | ISTRIP);
+
+  /**
+   * Miscellaneous flags
+   *
+   * `BRKINT`, `INPCK`, `ISTRIP`, and `CS8` all come from `<termios.h>`. This
+   * step probably won't have any observable effect, because these flags are
+   * either already turned off, or they do not really apply to modern terminal
+   * emulators. But at one point or another, switching them off was considered
+   * to be part of enabling "raw mode", so we carry on the tradition in making
+   * terminal program.
+   *  - When `BRKINT` is turned on, a break condition will cause a `SIGINT`
+   *  signal to be sent to the program similar to pressing `Ctrl-C`.
+   *  - `INPCK` enables parity checking, which does not seem to apply to modern
+   *  terminal emulators.
+   *  - `ISTRIP` causes the 8th bit of each input byte to be stripped, meaning
+   *  it will set it to `0`.
+   *  - `CS8` is not a flag, it is a bit mask with multiple bits, which we set
+   *  using bitwise OR. It sets the character size (CS) to 9 bits per byte.
+   */
+  raw.c_cflag |= CS8;
 
   /**
    * Output processing control
