@@ -211,105 +211,213 @@ void enableRawMode(void) {
    *  them directly to the application. (Like how `:` works on vim.)
    */
   raw.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN);
+
+  /**
+   * Timeout for `read()`
+   *
+   * Currently, `read()` will wait indefinitely for input from the keyboard
+   * before it returns. What if we want to do something like animate something
+   * on the screen while waiting for user input? We can set timeout, so that
+   * `read()` returns if it does not get any input for certain amount of time.
+   *
+   * `VMIN` and `VTIME` come from `<termios.h>`. They are indexes into the
+   * `c_cc` field, which stands for control characters, an array of bytes that
+   * control various terminal setting.
+   *
+   * The `VMIN` value sets the minimum number of bytes of input needed before
+   * `read()` can return. We set it to `0` so that `read()` retruns as soon as
+   * there is any input to be read.
+   *
+   * The `VTIME` value sets the maximum  amount of time to wait before `read()`
+   * returns. It is in tenths of second, so we set it to 1/10 of a second  (100
+   * milliseconds) . If `read()` times out, it will returns `0`, which makes
+   * sense bevause its default return value is the number of bytes read.
+   *
+   * We will also modify the main program from:
+   * int main(void){
+   *    enableRawMode();
+   *    char c;
+   *    while (read(STDIN_FILENO, &c, 1) == 1 && c != 'q') {
+   *      if (iscntrl(c)) {
+   *        printf("%d\r\n", c);
+   *      } else {
+   *        printf("%d ('%c')\r\n", c, c);
+   *      }
+   *    }
+   * }
+   *
+   * To:
+   * int main(void){
+   *    enableRawMode();
+   *    while(1){
+   *      char c = '\0';
+   *      read(STDIN_FILENO, &c, 1);
+   *
+   *      if(iscntrl(c)){
+   *        printf("%d\r\n", c);
+   *      }else{
+   *        print("%d('%c')\r\n", c, c)
+   *      }
+   *      if(c == 'q'){
+   *        break
+   *      }
+   *    }
+   * }
+   *
+   * When running the program, we can see how often `read()` times out. If we
+   * did not supply any input, `read()` returns without setting the `c`
+   * variable, which retains its `0` value and so we see some `0`s getting
+   * printed out, which is expected since it is the default return value .
+   *
+   * When we are typing really fast, we can see that `read()` returns right away
+   * for each keypress, so it is not like we can only read one keypress every
+   * 0.1 second.
+   *
+   * If this program is run on Windows Bash, we may see that `read()` still
+   * blocked for input. It does not seems to care about the `VTIME` value.
+   * Fortunately, this won't make too big of an issue, as we will be basically
+   * blocking for input anyways.
+   */
+  raw.c_cc[VMIN] = 0;
+  raw.c_cc[VTIME] = 1;
+
   tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
 
 int main(void) {
   enableRawMode();
 
-  /**
-   * `read()` and `STDIN_FILENO` come from `<unistd.h>`. We are asking
-   * `read()` to read 1 bute from the standard input into the variable `c`,
-   * and to keep doing it until there are no more bytes to be read. `read()`
-   * returns the number of bytes that it read, and will return `0` when it
-   * reaches the end of the file.
-   *
-   * When we run `./kilo`, the terminal get hooked up to the standard input,
-   * and so the keyboard input gets read into the `c` variable. However, by
-   * default the terminal starts in CANOCNICAL MODE. In this mode, keyboard
-   * input is only sent to the program when the user presses `ENTER`.
-   *
-   * This is useful for many programs: it lets the user type in a line of
-   * text, use `BACKSPACE` to fix errors until they get their input exactly
-   * the way they want it, and finally press `ENTER` to send it to the
-   * program. But it does not work well for programs with more complex user
-   * interfaces, such as text editors. We want to process each keypress as it
-   * comes in, so we can respond to it immediately.
-   *
-   * What we want is RAW MODE. Unfortunately, there is no simple switch we can
-   * flip to set the terminal to raw mode. Raw mode is achieved by turning off
-   * a great many flags in the terminal.
-   *
-   * To exit the program, press Ctrl-D to tell the `read()` that it has
-   * reached the end of file. Or we can always press Ctrl-C to signal the
-   * process to terminal immediately.
-   */
-  char c;
-
-  /**
-   * To demonstrate how canonical mode works, we will have a program to exit
-   * when it read a `q` keypress from the user.
-   *
-   *    while(read(STDIN_FILENO, &c, 1) == 1 && c != 'q');
-   *
-   * To quit this program, we will have to type a line of text that include a
-   * `q` in it, and then press `Enter`. The program will quickly read the line
-   * of text one character at a time until it reads the `q`, at which the
-   * `while` loop will stop and the program will exit. Any characters after
-   * the `q` will be leaft unread on the input queue, and we may see that
-   * input being fed into the sell after the program exits.
-   */
-  while (read(STDIN_FILENO, &c, 1) == 1 && c != 'q') {
-
-    /**
-     * keypress
-     *
-     * To get better idea of how input in raw mode works, lets print out each
-     * byte that we `read()`. We will print each character's numeric ASCII
-     * value, as well as character it represents if it is a printable character.
-     *
-     * `iscntrl()` comes from `<ctype.h>`, and `printf()` comes from
-     * `<stdio.h>`.
-     *    - `iscntrl()` tests whether a character is a control character.
-     *    Control characters are non-printable characters that we don't want to
-     *    print to the screen. ASCII codes 0 to 31 are all control characters as
-     *    well as code 127. ASCII codes 32 to 126 are all printable.
-     *    - `printf()` can print multiple representations of a byte. `%d` tells
-     *    it to format the byte as a decimal number (its ASCII code), and `%c`
-     *    tells it to write out the byte directly as a character.
-     *
-     * This is now a very useful program. It shows us how various keypress
-     * translate into the bytes we read. Most ordinary keys translate directly
-     * into the characters they represent.
-     *    - Arrows keys, `Page Up`, `Page Down`, `Home`, and `End` all input 3
-     *    or 4 bytes to terminal: `27`, `[`, and then one or two characters.
-     *    This is known as escape secuence. All escape sequences start with a
-     *    `27` byte.
-     *    - Pressing `Escape` sends a single 27 byte as input.
-     *    - `Backspace` is byte 127.
-     *    - `Delete` is a 4 byte escape sequence.
-     *    - `Enter` is byte 10, which is a newline character, also known as
-     *    `\n`.
-     *    - `Ctrl-A` is `1`, `Ctrl-B` is `2`. This would means that `Ctrl` key
-     *    combinations that do work map the letter A-Z to the codes 1-26.
-     *
-     * Pressing `Ctrl-S` will cause the program to freeze. What is actually
-     * happened is that we have asked the program to stop sending us output.
-     * Pressing `Ctrl-Q` tell the program to resume sending the output.
-     *
-     * Pressing `Ctrl-Z`, or `Ctrl-Y` on some machine will cause the program to
-     * be suspended to the background. `fg` command will bring it back to the
-     * foreground, but it may quit immediately after we do that, as a result of
-     * `read()` returning `-1` to indicate that an error occured. This is
-     * happening on macOS while Linux seems able to resume the `read()` call
-     * properly.
-     */
+  while (1) {
+    char c = '\0';
+    read(STDIN_FILENO, &c, 1);
     if (iscntrl(c)) {
       printf("%d\r\n", c);
     } else {
       printf("%d ('%c')\r\n", c, c);
     }
+
+    if (c == 'q') {
+      break;
+    }
   }
+
+  /*/1** */
+  /* * `read()` and `STDIN_FILENO` come from `<unistd.h>`. We are asking */
+  /* * `read()` to read 1 bute from the standard input into the variable `c`, */
+  /* * and to keep doing it until there are no more bytes to be read. `read()`
+   */
+  /* * returns the number of bytes that it read, and will return `0` when it */
+  /* * reaches the end of the file. */
+  /* * */
+  /* * When we run `./kilo`, the terminal get hooked up to the standard input,
+   */
+  /* * and so the keyboard input gets read into the `c` variable. However, by */
+  /* * default the terminal starts in CANOCNICAL MODE. In this mode, keyboard */
+  /* * input is only sent to the program when the user presses `ENTER`. */
+  /* * */
+  /* * This is useful for many programs: it lets the user type in a line of */
+  /* * text, use `BACKSPACE` to fix errors until they get their input exactly */
+  /* * the way they want it, and finally press `ENTER` to send it to the */
+  /* * program. But it does not work well for programs with more complex user */
+  /* * interfaces, such as text editors. We want to process each keypress as it
+   */
+  /* * comes in, so we can respond to it immediately. */
+  /* * */
+  /* * What we want is RAW MODE. Unfortunately, there is no simple switch we can
+   */
+  /* * flip to set the terminal to raw mode. Raw mode is achieved by turning off
+   */
+  /* * a great many flags in the terminal. */
+  /* * */
+  /* * To exit the program, press Ctrl-D to tell the `read()` that it has */
+  /* * reached the end of file. Or we can always press Ctrl-C to signal the */
+  /* * process to terminal immediately. */
+  /* *1/ */
+  /*char c; */
+
+  /*/1** */
+  /* * To demonstrate how canonical mode works, we will have a program to exit
+   */
+  /* * when it read a `q` keypress from the user. */
+  /* * */
+  /* *    while(read(STDIN_FILENO, &c, 1) == 1 && c != 'q'); */
+  /* * */
+  /* * To quit this program, we will have to type a line of text that include a
+   */
+  /* * `q` in it, and then press `Enter`. The program will quickly read the line
+   */
+  /* * of text one character at a time until it reads the `q`, at which the */
+  /* * `while` loop will stop and the program will exit. Any characters after */
+  /* * the `q` will be leaft unread on the input queue, and we may see that */
+  /* * input being fed into the sell after the program exits. */
+  /* *1/ */
+  /*while (read(STDIN_FILENO, &c, 1) == 1 && c != 'q') { */
+
+  /*  /1** */
+  /*   * keypress */
+  /*   * */
+  /*   * To get better idea of how input in raw mode works, lets print out each
+   */
+  /*   * byte that we `read()`. We will print each character's numeric ASCII */
+  /*   * value, as well as character it represents if it is a printable
+   * character. */
+  /*   * */
+  /*   * `iscntrl()` comes from `<ctype.h>`, and `printf()` comes from */
+  /*   * `<stdio.h>`. */
+  /*   *    - `iscntrl()` tests whether a character is a control character. */
+  /*   *    Control characters are non-printable characters that we don't want
+   * to */
+  /*   *    print to the screen. ASCII codes 0 to 31 are all control characters
+   * as */
+  /*   *    well as code 127. ASCII codes 32 to 126 are all printable. */
+  /*   *    - `printf()` can print multiple representations of a byte. `%d`
+   * tells */
+  /*   *    it to format the byte as a decimal number (its ASCII code), and `%c`
+   */
+  /*   *    tells it to write out the byte directly as a character. */
+  /*   * */
+  /*   * This is now a very useful program. It shows us how various keypress */
+  /*   * translate into the bytes we read. Most ordinary keys translate directly
+   */
+  /*   * into the characters they represent. */
+  /*   *    - Arrows keys, `Page Up`, `Page Down`, `Home`, and `End` all input 3
+   */
+  /*   *    or 4 bytes to terminal: `27`, `[`, and then one or two characters.
+   */
+  /*   *    This is known as escape secuence. All escape sequences start with a
+   */
+  /*   *    `27` byte. */
+  /*   *    - Pressing `Escape` sends a single 27 byte as input. */
+  /*   *    - `Backspace` is byte 127. */
+  /*   *    - `Delete` is a 4 byte escape sequence. */
+  /*   *    - `Enter` is byte 10, which is a newline character, also known as */
+  /*   *    `\n`. */
+  /*   *    - `Ctrl-A` is `1`, `Ctrl-B` is `2`. This would means that `Ctrl` key
+   */
+  /*   *    combinations that do work map the letter A-Z to the codes 1-26. */
+  /*   * */
+  /*   * Pressing `Ctrl-S` will cause the program to freeze. What is actually */
+  /*   * happened is that we have asked the program to stop sending us output.
+   */
+  /*   * Pressing `Ctrl-Q` tell the program to resume sending the output. */
+  /*   * */
+  /*   * Pressing `Ctrl-Z`, or `Ctrl-Y` on some machine will cause the program
+   * to */
+  /*   * be suspended to the background. `fg` command will bring it back to the
+   */
+  /*   * foreground, but it may quit immediately after we do that, as a result
+   * of */
+  /*   * `read()` returning `-1` to indicate that an error occured. This is */
+  /*   * happening on macOS while Linux seems able to resume the `read()` call
+   */
+  /*   * properly. */
+  /*   *1/ */
+  /*  if (iscntrl(c)) { */
+  /*    printf("%d\r\n", c); */
+  /*  } else { */
+  /*    printf("%d ('%c')\r\n", c, c); */
+  /*  } */
+  /*} */
 
   /**
    * Running `echo $?` after the program finishes running will return the
