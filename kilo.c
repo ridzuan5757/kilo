@@ -1,10 +1,58 @@
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <termios.h>
 #include <unistd.h>
 
 struct termios orig_termios;
+
+/**
+ * Error handling
+ *
+ * We will implement function that prints error message and exits the program.
+ * `perror()` comes from `<stdio.h>` and `exit()` comes from `<stdlib.h>`.
+ *
+ * Most C library functions that fail will set the global `errno` variable to
+ * indicate that the error was. `perror()` looks at the global `errno` variable
+ * and prints a descriptive error message for it. It also prints the string
+ * given to it before it prints the error message, which is meant to provide
+ * context about what part of the code causing such error.
+ *
+ * After printing out the error message, we exit the program with status `1`
+ * indicating a failure is happening.
+ *
+ * For every functions that has been implemented, we will check for the calls
+ * for failure and then call `die()` when they fail.
+ *
+ * For every function that return `-1` on error:
+ *  - `tcsetAttr()`
+ *  - `tcgetattr()`
+ *  - `read()`
+ *  These function will set the global `errno` value to indicate the error.
+ *
+ *  In Cygwin, when `read()` times out, it returns `-1` with an `errno` of
+ *  `EAGAIN`, instead of returning `0` like it supposed to do. In order to make
+ *  this program work on Cygwin, we would not treat `EAGAIN` as error when
+ *  calling `read()` in `main()`.
+ *
+ *  An easy way to make `tcgetattr()` fail is to give the program text file or a
+ *  pipe as the standard input instead of our terminal. This can be implemented
+ *  such as:
+ *
+ *      ./kilo <kilo.c>
+ *
+ *      or
+ *
+ *      echo test | ./kilo
+ *
+ *  Both should result in the same error for `tcgetattr`, something like
+ *  `Inappropiate ioctl for device`.
+ */
+void die(const char *s) {
+  perror(s);
+  exit(1);
+}
 
 /**
  * Disabling raw mode.
@@ -14,6 +62,21 @@ struct termios orig_termios;
  * `tcsetattr()` to apply it to the terminal when the program exits.
  */
 void disableRawMode(void) {
+  /**
+   * To implement the error handling here, we check the return value of
+   * `tcsetAttr()` call.
+   *
+   * Old:
+   * tcsetAttr(STDIN_FILENO, TCAFLUSH, &orig_termios)
+   *
+   * New:
+   * if(tcsetAttr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1){
+   *    die("tcsetAttr")
+   * }
+   */
+  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1) {
+    die("tcsetattr");
+  }
 
   /**
    * As `TCSAFLUSH` option being passed to `tcsetattr()` when the program exits,
@@ -22,7 +85,7 @@ void disableRawMode(void) {
    *
    * It discards any unread input before applying change to the terminal.
    */
-  tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+  // tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
 }
 
 /**
@@ -66,6 +129,11 @@ void disableRawMode(void) {
  *  while every other bit to retain its current value.
  */
 void enableRawMode(void) {
+
+  if (tcgetattr(STDIN_FILENO, &orig_termios) == -1) {
+    die("tcgetattr");
+  }
+
   /**
    * `atexit()` comes from `<stdlib.h>`. We use it to register the
    * `disableRawMode()` function to be called automatically when the program
@@ -73,7 +141,7 @@ void enableRawMode(void) {
    * `exit()` function. This way we can ensure we will leave the terminal
    * attriubtes the way we found them when the program exits.
    */
-  tcgetattr(STDIN_FILENO, &orig_termios);
+  // tcgetattr(STDIN_FILENO, &orig_termios);
   atexit(disableRawMode);
 
   /**
@@ -281,7 +349,9 @@ void enableRawMode(void) {
   raw.c_cc[VMIN] = 0;
   raw.c_cc[VTIME] = 1;
 
-  tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) {
+    die("tcsetattr");
+  }
 }
 
 int main(void) {
@@ -289,7 +359,14 @@ int main(void) {
 
   while (1) {
     char c = '\0';
-    read(STDIN_FILENO, &c, 1);
+
+    /**
+     * `errno` and `EAGAIN` comes from `<errno.h>`.
+     */
+    if (read(STDIN_FILENO, &c, 1) == -1 && errno != EAGAIN) {
+      die("read");
+    }
+
     if (iscntrl(c)) {
       printf("%d\r\n", c);
     } else {
