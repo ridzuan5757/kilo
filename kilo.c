@@ -5,6 +5,34 @@
 #include <termios.h>
 #include <unistd.h>
 
+/**
+ * quit operation control
+ *
+ * `Ctrl` key combined with the alphabetic keys seemed to map to bytes 1 to 26.
+ * We can use this to detect `Ctrl` key combinations and map them to different
+ * operations in our editor. This way, we can map `Ctrl-Q` for handling the quit
+ * operation.
+ *
+ * The `CTRL_KEY` macro bitwise-AND a character with value `0b00011111`, in
+ * binary. In C, we generally specify bitmasks using hexadecimal, since C does
+ * not have binary literals, and hexadecimal is more concise and readable.
+ *
+ * In other word, it toggle the upper 3 bits of the character to `0`. This
+ * mirrors what the `Ctrl` key does in the terminal: it strips bits 5 and 6 from
+ * whatever key we press in combination with `Ctrl`, and sends that.
+ *
+ *  - 'a' character is 97
+ *  - `Ctrl-a` is 1
+ *  - The byte value difference is 96 which can be represented as 0b01100000
+ *  - Toggling out 96 from `a` means we are filtering the `Ctrl` key out
+ *
+ * By striping bits 5 and 6 from whatever key that we press in combination with
+ * `Ctrl` we can detect the `Ctrl` key being pressed. Similarly, we can set and
+ * clear bit 5 to switch between lowercase and uppercase character.
+ *
+ */
+#define CTRL_KEY(k) (k & 0x1f)
+
 struct termios orig_termios;
 
 /**
@@ -373,7 +401,7 @@ int main(void) {
       printf("%d ('%c')\r\n", c, c);
     }
 
-    if (c == 'q') {
+    if (c == CTRL_KEY('q')) {
       break;
     }
   }
