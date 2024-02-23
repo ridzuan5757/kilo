@@ -26,4 +26,15 @@ To run `kilo`, type `./kilo` in the shell and press `Enter`. The program does
 not print any output, but the exit status can be checked by running `echo $?`,
 which should print `0`.
 
+# `Makefile`
 
+Compiling the project by typing in the terminal `cc kilo.c -o kilo` can be
+repititive. The `make` program allows us to run `make`, and it will compile the
+program altogether. We just have to supply a `Makefile` to tell it how the
+program should be compiled.
+
+```Makefile
+kilo:   kilo.c
+    $(CC) kilo.c -o kilo -Wall -Wextra -pedantic -std=99
+
+```
