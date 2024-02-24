@@ -44,6 +44,7 @@ reads `q` key press from the user.
 int main(){
     char c;
     while(read(STDIN_FILENO, &c, 1) == 1 && c != 'q');
+    return 0;
 }
 ```
 
@@ -53,3 +54,67 @@ at time until it reads the `q`, at which point the `while` loop will stop and
 the program will exit. Any characters after the `q` will be left unread on the
 input queue, and we may see that input being fed into the shell after the
 program exits.
+
+# Echo control
+
+We can set terminal's attribute by:
+1. Using `tcgetattr()` to read the current attributes into a `termios struct`.
+2. Modify the struct manually.
+3. Pass the modified `termios struct` to `tcsetattr()` to overwrite the new terminal
+   attributes.
+
+`struct termios`, `tcgetattr()`, `tcsetattr`, `ECHO`, and `TCAFLUSH` all come
+from `<termios.>h`.
+
+
+```c
+#include <termios.h>
+#include <unistd.h>
+
+void enableRawMode(){
+    struct termios raw;
+    tcgetattr(STDIN_FILENO, &raw);
+    raw.c_lflag &= ~ECHO;
+    tcsetattr(STDIN_FILENO, TCAFLUSH, &raw);
+}
+
+int main(){
+    enableRawMode();
+
+    char c;
+    while(read(STDIN_FILENO, &c, 1) == 1 && c != 'q');
+    return 0;
+}
+
+```
+
+The `ECHO` flag causes each key that is being typed to be printed to the
+terminal, so we can see what we are typing. While this could be useful in
+canonical mode, we would not be needing it as we are trying to render a user
+interface in raw mode. The program is still doing the same thing, it just does
+not print whatever that is being typed, similar to `sudo` mode.
+
+After the program quits, depending on the type of shell, we may find the
+terminal is still not echoing what we type. However, it still listens to what is
+being typed. Just press `Ctrl-C` to start a fresh line of input to our shell,
+and type in `reset` and press `Enter`. This resets the terminal back to normal
+in most cases. Or we can just restart the terminal emulator.
+
+Terminal attributes can be read into a `termios` struct by `tcgetattr()`. After
+modifying them, we can then apply them to the terminal using `tcsetattr()`. The
+`TCAFLUSH` argument specifies when to apply the change: in this case, it waits
+for all pending output to be written to the terminal, and also discards any
+input that has not been read.
+
+The `c_lflag` bit field is for **local flags** that can be described as
+miscellaneous flags. The other flag fields are:
+- `c_iflag` input flags.
+- `c_oflag` output flags.
+- `c_cflag` control flags.
+which we will have to modify in order to enable raw mode.
+
+The `ECHO` is a bit flag, defined as `00000000000000000000000000001000` in
+binary. We use bitwise-NOT operator `~` to get
+`11111111111111111111111111110111`. We then bitwise-AND this value with the
+flags field, which forces the fourth bit in the flags' field to become `0`, and
+causes every other bit to retain its current value.
