@@ -165,3 +165,17 @@ after the program quits. This is because `TCAFLUSH` option being passed to
 unread input before applying the changes to the terminal. This however, does not
 happen in Cygwin.
 
+# Canonical mode control
+
+There is a `ICANON` flag that allows us to turn off canonical mode. This means
+we will finally be reading the input byte-by-byte instead of line-by-line.
+
+```c
+void enableRawMode(){
+    /* ... */
+    raw.c_lflag &= ~(ECHO | ICANON);
+    /* ... */
+}
+```
+`ICANON` comes from `<termios.h>`. The program will now quit as soon as `q` key
+is pressed.
