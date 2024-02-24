@@ -26,4 +26,30 @@ useful for many programs: it lets the user type in a line of text, use
 we want it, and finally press `Enter` to send it to the program. However, this
 does not work well for programs with mode complex user interfaces, like text
 editors. We want to process each key press as it comes in, so we can respond to
-it immediately.
+it immediately. What we want is **raw mode**, which can be achieved by manipulating terminal
+flags.
+
+To exit the program, we can either:
+- `Ctrl-D` to tell `read()` that it has reached `EOF`.
+- `Ctrl-C` to signal the process to terminate immediately.
+
+# Quit control
+
+To demonstrate how canonical mode works, we will have the program exit when it
+reads `q` key press from the user.
+
+```c 
+#include<unistd.h>
+
+int main(){
+    char c;
+    while(read(STDIN_FILENO, &c, 1) == 1 && c != 'q');
+}
+```
+
+To quit the program, we have to type a line of text that includes `q` in it, and
+then press enter. The program will quickly read the line of text one character
+at time until it reads the `q`, at which point the `while` loop will stop and
+the program will exit. Any characters after the `q` will be left unread on the
+input queue, and we may see that input being fed into the shell after the
+program exits.
