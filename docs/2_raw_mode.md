@@ -118,3 +118,50 @@ binary. We use bitwise-NOT operator `~` to get
 `11111111111111111111111111110111`. We then bitwise-AND this value with the
 flags field, which forces the fourth bit in the flags' field to become `0`, and
 causes every other bit to retain its current value.
+
+# Disable raw mode at exit
+
+To restore the terminal's original attributes when the program exits, we have
+to:
+- Save a copy of the `termios` struct in its original state.
+- Use `tcsetattr()` to apply it to the terminal when the program exits.
+
+```c
+#include <stdlib.h>
+#include <termios.h>
+#include <unistd.h>
+
+struct termios orig_termios;
+
+void disableRawMode(){
+    tcsetattr(STDIN_FILENO, TCAFLUSH, &orig_termios);
+}
+
+void enableRawMode(){
+    tcgetattr(STDIN_FILENO, &orig_termios);
+    atexit(disableRawMode);
+
+    struct termios raw = orig_termios;
+    raw.c_lflag &= ~ECHO;
+
+    tcsetattr(STDIN_FILENO, TCAFLUSH, &raw);
+
+    int main(){ ... }
+}
+```
+`atexit()` comes from `<stdlib.h>`. We use it to register `disableRawMode()`
+function to be called automatically when the program exits, whether it exits by
+returning from `main()`, or by calling `exit()` function. This way we can ensure
+we will leave the terminal attributes the way we found them when the program
+exits.
+
+We store the original terminal attributes in a global variable, `orig_termios`.
+We assign the `orig_termios` struct to the `raw` to make copy of it before we
+start modifying the terminal properties.
+
+It can be observed that the leftovers input is no longer fed into the shell
+after the program quits. This is because `TCAFLUSH` option being passed to
+`tcsetattr()` when the program exits. As described earlier, it discards any
+unread input before applying the changes to the terminal. This however, does not
+happen in Cygwin.
+
