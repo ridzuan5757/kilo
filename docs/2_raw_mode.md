@@ -179,3 +179,70 @@ void enableRawMode(){
 ```
 `ICANON` comes from `<termios.h>`. The program will now quit as soon as `q` key
 is pressed.
+
+# Key presses display
+
+To get an intuition on how raw mode works, we can try printing out each byte
+that we `read()`. We will print each character's numeric ASCII value, as well
+as the character it represents if it is a printable character.
+
+```c
+#include <ctype.h>
+#include <stdio.h>
+
+/* ... */
+
+int main(){
+    enableRawMode();
+
+    char c;
+    
+    while(read(STDIN_FILENO. &c, 1) == 1 && c != 'q'){
+        if(iscntrl(c)){
+            printf("%d\n", c);
+        }else{
+            printf("%d ('%c')\n", c, c);
+        }
+    }
+
+    return 0;
+}
+
+```
+
+`iscntrl()` comes from `<ctype.h>`, and `printf()` comes from `<stdio.h>`.
+`iscntrl()` tests whether a character is a control character.
+
+#### Control characters
+
+Control characters are non-printable characters that we don't want to print to
+the screen. ASCII codes 0-31 are all control characters, and 127 is also a
+control character. ASCII codes 32-126 are all printable.
+
+`printf()` can print multiple representations of a byte. `%d` tells it to format
+the byte as decimal number (its ASCII code), and `%c` tells it to write out the
+byte directly, as a character.
+
+This program now shows us how various key presses translate into the bytes we
+read. Most ordinary keys translate directly into the characters they represent.
+However,
+- Arrow keys, `Page Up`, `Page Down`, `Home`, and `End` all input 3 or 4 bytes
+  to the terminal: `27`, `[`, and then one or two other characters. This is
+  known as *escape characters*. All escape sequences start with a `27` byte.
+  That being said, pressing `Escape` sends a single `27` byte as input.
+- `Backspace` is byte `127`.
+- `Delete` is a 4-byte escape sequence.
+- `Enter` is byte `10`, which is a newline character, known as `\n`.
+- `Ctrl-A` is `1`, `Ctrl-B` is `2`, and so on. `Ctrl` key combinations map
+  letters A-Z to the codes 1-26.
+
+#### `Ctrl-X` sequences:
+- Pressing `Ctrl-C` will stop the application.
+- Pressing `Ctrl-S` will cause the program to appear froze. What actually
+  happened is that we asked the program to stop sending output. Pressing `Ctrl-Q`
+  will tell the program to resume sending output.
+- Pressing `Ctrl-Z` or `Ctrl-Y` will cause the program to be suspended to
+  background. Running the `fg` command will bring it back to the foreground. (It
+  may quit immediately after we do that as a result of `read()` returning `-1`
+  to indicate that an error occurred. This happens on macOS, while Linux seems to
+  be able to resume `read()` call properly.)
