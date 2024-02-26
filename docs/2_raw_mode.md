@@ -246,3 +246,30 @@ However,
   may quit immediately after we do that as a result of `read()` returning `-1`
   to indicate that an error occurred. This happens on macOS, while Linux seems to
   be able to resume `read()` call properly.)
+
+# `Ctrl-C` and `Ctrl-Z` signals
+
+By default, `Ctrl-C` sends a `SIGINT` signal to the current process which causes
+it to terminate, and `Ctrl-Z` sends a `SIGTSTP` signal to the current process
+which causes it to suspend. These signals can be stopped by toggling `ISIG` flag
+of `c_lflag` bit fields. `ISIG` comes from `<termios.h>`.
+
+```c
+void enableRawMode(){
+    tcgetattr(STDIN_FILENO, &orig_termios);
+    atexit(disableRawMode);
+
+    struct termios raw = orig_termios;
+    raw.c_lflag &= ~(ECHO | ICANON | ISIG);
+
+    tcsetattr(STDIN_FILENO, TCAFLUSH, &raw);
+}
+
+```
+
+Now `Ctrl-C` can be read as `3` byte and `Ctrl-Z` can be read as `26` byte just
+like any other `Ctrl` with any alphabets. This also disables `Ctrl-Y` on macOS,
+which behaves similar as `Ctrl-Z` except it waits for the program to read input
+before suspending it.
+
+
