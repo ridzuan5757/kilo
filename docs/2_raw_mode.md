@@ -348,3 +348,58 @@ void enableRawMode(){
 carriage return and `NL` stands for new line. Now `Ctrl-M` and `Enter/Return` 
 will be read as `13`.
 
+# Output processing control
+
+It turns out that the terminal does similar translation on the output side. It
+translates each new lines `'\n'` we print into carriage return followed by new
+line `"\r\n"`. The terminal requires both of these characters in order to start
+new line of text. The carriage return moves the cursor back to the beginning of
+the current line, and the newline moves the cursor down a line, scrolling the
+screen if necessary. These two distinct operations originated in the days of
+typewriters and teletypes.
+
+We can turn off all output processing features by turning off the `OPOST` flag.
+In practice, the `'\n'` to `"\r\n"` translation is likely the only output
+processing feature turned off by default.
+
+```c
+void enableRawMode(){
+    tcgetattr(STDIN_FILENO, &orig_termios);
+    atexit(disableRawMode);
+
+    struct termios raw = orig_termios;
+    raw.c_iflag &= ~(ICRNL | IXON);
+    raw.c_oflag &= ~(OPOS);
+    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+
+    tcsetattr(STDIN_FILENO, TCAFLUSH, &raw);
+}
+```
+
+`OPOST` comes from `<termios.h>`. `O` means it is an output flag and `POST`
+stands for post-processing output.
+
+If we run the program now, we will see that the newline we are printing are only
+moving the cursor down and not to the left of the screen. We have to add a
+carriage return character `'\r'` on the `printf()` statements.
+
+```c
+int main(void){
+    enableRawMode();
+
+    char c;
+    while(read(STDIN_FILENO, &c, 1) == 1 && c != 'q'){
+        if(iscntrl(c)){
+            printf("%d\r\n", c);
+        }else{
+            printf("%d ('%c')\r\n", c, c);
+        }
+    }
+
+    return 0;
+}
+
+```
+That being said, `"\r\n"` has to be implemented whenever we need to start a new
+line.
+
