@@ -403,3 +403,30 @@ int main(void){
 That being said, `"\r\n"` has to be implemented whenever we need to start a new
 line.
 
+# Miscellaneous flags
+
+`BRKINT`, `INPCK`, `ISTRIP` and `CS8` are all comes from `<termios.h>`:
+- When `BRKINT` is turned on, a break condition will cause a `SIGINT` signal to
+  sent to the program, similar to pressing `Ctrl-C`.
+- `INPCK` enables parity check, this does not really apply to modern terminal
+  emulators.
+- `ISTRIP` causes the 8th bit of each input byte to be stripped, meaning it will
+  set it to `0`.
+- `CS8` is not a flag, but a bit mask with multiple bits, which we set using
+  bitwise-OR operator. It sets the character size `CS` to 8 bits per byte.
+
+```c
+void enableRawMode(){
+    tcgetattr(STDIN_FILENO, &orig_termios);
+    atexit(disableRawMode);
+
+    struct termios raw = orig_termios;
+    raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+    raw.c_oflag &= ~(OPOST);
+    raw.c_cflag |= (CS8);
+    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+
+    tcsetattr(STDIN_FILENO, TCAFLUSH, &raw);
+}
+```
+
