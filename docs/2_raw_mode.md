@@ -320,6 +320,31 @@ void enableRawMode(){
 `IEXTEN` comes from `<termios.h>`. With this flag disabled, `Ctrl-V` can be read
 as `22` bytes and `Ctrl-O` as `15` bytes.
 
+# Carriage return and new line control
 
+If we run the program now and go through the whole alphabet while holding `Ctrl`
+key, we should be able to see that we have every character except `M`. `Ctrl-M`
+behaviour is slightly different: it is being read as `10` bytes when we are
+expecting it to read as `13` bytes, since it is the 13th letter of the alphabet
+system, and `Ctrl-J` already produces a `10`. This behaviour is identical to
+`Enter/Return` key that is also read as `10`.
 
+It turns out that the terminal is helpfully translatting any carriage returns
+(`13`, `\r`) inputted by user into newlines (`10`, `\n`). This feature can be
+controlled via `ICRNL` flag.
+
+```c
+void enableRawMode(){
+    tcgetattr(STDIN_FILENO, &orig_termios);
+    
+    struct termios raw = orig_termios;
+    raw.c_iflag &= ~(IXON | ICRNL);
+    raw.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN);
+
+    tcsetattr(STDIN_FILENO, TCAFLUSH, &raw);
+}
+```
+`ICRNL` comes from `<termios.h>`. The `I` stands for input flag, `CR` is
+carriage return and `NL` stands for new line. Now `Ctrl-M` and `Enter/Return` 
+will be read as `13`.
 
