@@ -272,4 +272,54 @@ like any other `Ctrl` with any alphabets. This also disables `Ctrl-Y` on macOS,
 which behaves similar as `Ctrl-Z` except it waits for the program to read input
 before suspending it.
 
+# Software flow control
+
+By default, `Ctrl-S` and `Ctrl-Q` are used for software flow control. `Ctrl-S`
+stops data from being transmitted to the terminal until `Ctrl-Q` is pressed.
+This originates in the days when we might want to pause the transmission of data
+to let a device such as printer to catch up. This can be turned off by toggling
+`IXON` flag of `c_iflag` bit fields.
+
+```c
+void enableRawMode(){
+    tcgetattr(STDIN_FILENO, &orig_termios);
+    atexit(disableRawMode);
+
+    struct termios raw = orig_termios;
+    raw.c_iflag &= ~IXON;
+    raw.c_lflag &= ~(ECHO | ICANON | ISIG);
+
+    tcsetattr(STDIN_FILENO, TCAFLUSH, &raw);
+}
+```
+`IXON` flag comes from `<termios.h>`. The `I` stands for input flag and `XON`
+comes from the two control characters that `Ctrl-S` and `Ctrl-Q` produce: `XON`
+to resume transmission and `XOFF` to pause transmission. Now `Ctrl-S` can be
+read as `19` bytes and `Ctrl-Q` can be read as `17` byte.
+
+# Input processing option
+
+On some systems, when we type `Ctrl-V`, the terminal waits for us to type
+another character and then sends that character literally. For example, before
+we disabled `Ctrl-C`, we might have been able to type `Ctrl-V` and then `Ctrl-C`
+to input a `3` byte. This feature can be turned off using `IEXTEN` flag. Turning
+off `IEXTEN` flag also fixes `Ctrl-O` on macOS, whose terminal driver is set to
+dicard that control character.
+
+```c
+void enableRawMode(){
+    tcgetattr(STDIN_FILENO, &orig_termios);
+    
+    struct termios raw = orig_termios;
+    raw.c_iflag &= ~IXON;
+    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+    
+    tcsetattr(STDIN_FILENO, TCAFLUSH, &raw);
+}
+```
+`IEXTEN` comes from `<termios.h>`. With this flag disabled, `Ctrl-V` can be read
+as `22` bytes and `Ctrl-O` as `15` bytes.
+
+
+
 
