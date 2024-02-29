@@ -430,5 +430,75 @@ void enableRawMode(){
 }
 ```
 
+# `read()` timeout
+
+Currently,`read()` will wait indefinitely for input from the keyboard before it
+returns. If we want to do something such as animation on the screen while
+waiting for user input, we can set a timeout, so that `read()` returns if it
+does not get any input for certain amount of time.
+
+```c
+void enableRawMode(){
+    tcgetattr(STDIN_FILENO, &orig_termios);
+    atexit(disableRawMode);
+
+    struct termios raw = orig_termios;
+    raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+    raw.c_oflag &= ~(OPOST);
+    raw.c_cflag |= CS8;
+    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+
+    raw.c_cc[VMIN] = 0;
+    raw.c_cc[VTIME] = 1;
+
+    tcsetattr(STDIN_FILENO, TCAFLUSH, &raw);
+}
+
+
+int main(void){
+    enableRawMode();
+
+    while(1){
+
+        char c = '\0';
+        read(STDIN_FILENO, &c, 1);
+
+        if(iscntrl(c)){
+            printf("%d\r\n", c);
+        }else{
+            printf("%d ('%c')\r\n", c, c);
+        }
+
+        if(c == 'q'){
+            break;
+        }
+    }
+
+    return 0;
+}
+```
+
+`VMIN` and `VTIME` comes from `<termios.h>`. They are indexes into the `c_cc`
+field, which stands for **control characters**, an array of bytes that control
+various terminal settings.
+
+The `VMIN` values sets the minimum number of bytes of input needed before
+`read()` can return. We set it to `0` so that `read()` returns as soon as there
+is any input to be read. The `VTIME` value sets the maximum amount of time to
+wait before `read()` returns. It is calculated as tenths of seconds, so we set
+it to 1/10 of a second or 100 milliseconds. If `read()` times out, it will
+return `0`, which makes sense because its usual return value is the number of
+bytes read.
+
+When we run the program, we can see how often `read()` times out. If we are not
+supplying any input, `read()` returns without setting the `c` variable, which
+retains its value and so we see `0`s getting printed out. If we typed really
+fast, we can see that `read()` returns right away after each keypress, so it is
+not like we can only read one kepress every 100 millisecond.
+
+If we are using Bash on Windows, we may see that `read()` still blocks for
+input. It does not seems to care about the `VTIME` value. Fortunately, this
+would not make a big difference in the text editor, as we will be basically
+blocking for input anyways.
 
 
