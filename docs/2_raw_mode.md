@@ -492,13 +492,96 @@ bytes read.
 
 When we run the program, we can see how often `read()` times out. If we are not
 supplying any input, `read()` returns without setting the `c` variable, which
-retains its value and so we see `0`s getting printed out. If we typed really
-fast, we can see that `read()` returns right away after each keypress, so it is
-not like we can only read one kepress every 100 millisecond.
+retains its value and, so we see `0`s getting printed out. If we typed really
+fast, we can see that `read()` returns right away after each key press, so it is
+not like we can only read one key press every 100 millisecond.
 
 If we are using Bash on Windows, we may see that `read()` still blocks for
-input. It does not seems to care about the `VTIME` value. Fortunately, this
+input. It does not seem to care about the `VTIME` value. Fortunately, this
 would not make a big difference in the text editor, as we will be basically
-blocking for input anyways.
+blocking for input anyway.
 
+# Error handling
 
+`enableRawMode()`   now gets us fully into raw mode. It is time to clean up the
+code by adding some error handling. First we will add `die()` function that
+prints an error message and exits the program.
+
+```c
+void die(const char *s){
+    perror(s);
+    exit(1);
+}
+```
+
+`perror()` comes from `<stdio.h>`, and `exit()` comes from `<stdlib.h>`. Most C
+library functions that fail will set the global `errno` variable to indicate
+what the error was. `perror()` looks at the global `errno` variable and prints a
+descriptive error message for it. It also prints the string given to it before
+it prints the error message, which is meant to provide context about what part
+of our code caused the error.
+
+After printing out the error message, we exit the program with exit status of 
+`1`, which indicates failure (as would for any non-zero value). 
+
+```c
+void disableRawMode(){
+    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1){
+        die("tcsetattr");
+    }
+}
+
+void enableRawMode(){
+    if(tcgetattr(STDIN_FILENO, &orig_termios) == -1){
+        die("tcgetattr");
+    }
+    atexit(disableRawMode);
+
+    struct termios raw = orig_termios;
+    raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+    raw.c_oflag &= ~(OPOST);
+    raw.c_clag |= CS8;
+    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+    raw.c_cc[VMIN] =0;
+    raw.c_cc[VTIME] = 1;
+
+    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &RAW) == -1){
+        die("tcsetattr");
+    }
+}
+
+int main(){
+    enableRawMode();
+
+    while(1){
+        char c = '\0';
+
+        if(read(STDIN_FILENO, &C, 1) == -1  && errno != EAGAIN){
+            die("read");
+        }
+
+        if(iscntrl(c)){
+            printf("%d\r\n", c);
+        }else{
+            printf("%d ('%c')\r\n", c, c);
+        }
+
+        if(c == 'q'){
+            break;
+        }
+    }
+}
+```
+
+`errrno` and `EAGAIN` come from `<errno.h>`. `tcsetattr()`, `tcgetattr()`, and
+`read()` all return `-1` on failure, and set the `errrno` value to indicate
+the error. 
+
+In Cygwin, when `read()` times out it returns `-1` with an `errno` of `EAGAIN`,
+instead of just returning `0` like it is supposed to. To make this program works
+in Cygwin terminal, we won't treat `EAGAIN` as error.
+
+An easy way to make `tcgetattr()` fail is to give the pgforam a text file or
+pipe as the standard input instead of our terminal. To give it a file as a
+standard input, run `./kilo <kilo.c>`. To give it a pipe, run `echo test |
+./kilo`. Both should result `Inappropiate ioctl for device`.
