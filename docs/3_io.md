@@ -40,3 +40,59 @@ combination with `Ctrl`, and sends that.
 By convention, bit numbering starts from 0. The ASCII character set seems to be
 designed this way on purpose. It is also similarly designed so that we can set
 and clear bit 5 to switch between lowercase and uppercase.
+
+# Keyboard input refactor
+
+Let's make a function for low-level key press reading, and another function for
+mapping key presses to editor operations. We will also stop printing out
+key presses at this point.
+
+```c
+char editorReadKey(){
+    int nread;
+    char c;
+
+    while((nread = read(STDIN_FILENO, &c, 1)) != 1){
+        if(nread == -1 && errno != EAGAIN){
+            die("read");
+        }
+    }
+
+    return c;
+}
+
+void editorProcessKeypress(){
+    char c = editorReadKey();
+
+    switch(c){
+        case CTRL_KEY('q'):
+            exit(0);
+            break;
+    }
+}
+
+int main(){
+    enableRawMode();
+
+    while(1){
+        editorProcessKeypress();
+    }
+
+    return 0;
+}
+```
+
+`editorReadKey()`'s job is to wait for one key press, and return it. Later, we
+will expand this function to handle escape sequences, which involves reading
+multiple bytes that represent single key press, as is the case with arrow keys.
+
+`editorProcessKeypress()` waits for a key press, and then handles it. Later, it
+will map various `Ctrl` key combinations and other special keys to a different
+editor functions, and insert any alphanumeric and other printable keys'
+characters into that is being edited.
+
+Note that `editorReadKey()` is part of `terminal` section because it deals with
+the low level terminal input section because it deals with mapping keys to
+editor functions at much higher level.
+
+
