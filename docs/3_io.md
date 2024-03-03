@@ -95,4 +95,54 @@ Note that `editorReadKey()` is part of `terminal` section because it deals with
 the low level terminal input section because it deals with mapping keys to
 editor functions at much higher level.
 
+# Screen clear
+
+We are going to render the editor's user interface to the screen after each
+key press. Let's start by just clearing the screen.
+
+```c
+void editorRefreshScreen(){
+    write(STDOUT_FILENO, "\x1b[2J", 4);
+}
+
+int main(){
+    enableRawMode();
+
+    while(1){
+        editorRefreshScreen();
+        editorProcessKeypress();
+    }
+
+    return 0;
+}
+```
+
+`write()` and `STDOUT_FILENO` come from `<unistd.h>`. The `4` in our `write()`
+call means we are writing `4` bytes out to the terminal. The first byte is 
+`\x1b`, which is the escape character, or `27` decimal. The other three bytes
+are `[2J`.
+
+We are writing an **escape sequence** to the terminal. Escape sequences always
+start with an escape character `27` followed by a `[` character. Escape
+sequences instruct the terminal to do various text formatting tasks, such as
+text coloring text, moving the cursor around, and clearing parts of the screen.
+
+We are using the `J` command to clear the screen. Escape sequence commands take
+arguments, which come before the command. In this case, the argument is `2`,
+which says to clear the entire screen:
+
+- `<esc>[1J` would clear the screen up to where the cursor is.
+- `<esc>[0J` would clear the screen from the cursor up to the end of the 
+  screen.
+- Also, `0` is the default argument for `J`, so just by `<esc[J` by itself
+  would also clear the screen from the cursor to the end.
+
+For our text editor, we will be mostly using VT100 escape sequences, which are
+supported very widely by modern terminal emulators. See the VT100 User Guide for
+complete documentation for each escape sequence.
+
+If we wanted to support the maximum number of terminals out there, we would use
+`ncurses` library, which uses the `terminfo` database to figure out the
+capabilities of a terminal and what escape sequences to use for that particular
+terminal.
 
