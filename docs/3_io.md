@@ -146,3 +146,27 @@ If we wanted to support the maximum number of terminals out there, we would use
 capabilities of a terminal and what escape sequences to use for that particular
 terminal.
 
+# Reposition the cursor
+
+We may notice that the `<esc>[J2` command left the cursor at the bottom of the
+screen. Let's reposition it at the top-left so that we are ready to draw
+the editor interface from top to bottom.
+
+```c
+void editorRefreshScreen(){
+    write(STDOUT_FILENO, "x1b[2J", 4);
+    write(STDOUT_FILENO, "x1b[H", 3);
+}
+```
+This escape sequence is only `3` byte long, and use `H` (cursor position)
+command to position the cursor. The `H` command actually takes 2 arguments:
+
+- The row number 
+- The Column number
+
+at which to position the cursor. So if we have an 80 * 24 size terminal and we
+want the cursor in the center of the screen, we could use the command
+`<esc>[12;40H`. (Multiple arguments are separated by `;` character). The default
+arguments for `H` both happen to be `1`, so we can leave both arguments out and
+empty for this case as it will position the cursor at the first row and the
+first column.

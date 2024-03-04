@@ -63,7 +63,10 @@ void editorProcessKeypress() {
   }
 }
 
-void editorRefreeshScreen() { write(STDOUT_FILENO, "\x1b[2J", 4); }
+void editorRefreeshScreen() {
+  write(STDOUT_FILENO, "\x1b[2J", 4);
+  write(STDOUT_FILENO, "\X1b[H", 3);
+}
 
 int main(void) {
   enableRawMode();
