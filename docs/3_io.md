@@ -170,3 +170,41 @@ want the cursor in the center of the screen, we could use the command
 arguments for `H` both happen to be `1`, so we can leave both arguments out and
 empty for this case as it will position the cursor at the first row and the
 first column.
+
+# Clear the screen from exit
+
+Let's clear the screen and reposition the cursor when the program exits. If an
+error occurs in the middle of the rendering the screen, we do not want a
+bunch of garbage left over on the screen, and we don't want the error to be
+printed wherever the cursor happens to be at that point.
+
+```c
+void die(const char *c){
+    write(STDOUT_FILENO, "x1b[2J", 4);
+    write(STDOUT_FILENO, "x1b[H", 3);
+
+    perror(s);
+    exit(1);
+}
+
+void editorProcessKeypress(){
+    char c = editorReadKey();
+
+    switch(c){
+        case CTRL_KEY('q'):
+            write(STDOUT_FILENO, "\x1b[2J", 4);
+            write(STDOUT_FILENO, "\x1b[H", 3);
+            exit(0);
+            break;
+    }
+}
+
+```
+
+We have two exit points we want to clear the screen at:
+
+- `die()`
+- When the user presses `Ctrl-Q` to quit.
+
+We could use `atexit()` to clear the screen when our program exits, but then
+the error message printed by `die()` would be erased right after printing it.
