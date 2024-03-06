@@ -242,3 +242,46 @@ have to draw. For now, we just draw `24` rows.
 
 After we are done drawing, we do another `<esc>[H` escape sequence to reposition
 the cursor back up at the top left-corner.
+
+# Global state
+
+The next goal is to get the size of the terminal, so we know how many rows to
+draw in `editorDrawRows()`. But first, let's set up a global `struct` that will
+contain the editor state, which we will use to store the width and height of the
+terminal. For now let's just put our `orig_termios` global into the `struct`.
+
+```c
+struct editorConfig{
+    struct termios orig_termios;
+}
+struct editorConfig E;
+
+void disableRawMode(){
+    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.orig_termios) == -1){
+        die("tcsetattr");
+    }
+}
+
+void enableRawMode(){
+    if(tcgetattr(STDIN_FILENO, &E.orig_termios) == -1){
+        die("tcgetattr");
+    }
+    atexit(disableRawMode);
+
+    struct termios raw = E.orig_termios;
+
+    raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+    raw.c_oflag &= ~(OPOST);
+    raw.c_cflag |= CS8;
+    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+    raw.c_cc[VMIN] = 0;
+    raw.c_cc[VTIME] = 1;
+
+    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1){
+        die("tcsetattr");
+    }
+}
+```
+
+Our global variable containing our editor state is named `E`. We must replace
+all occurence of `orig_termios` with `E.orig_termios`;
