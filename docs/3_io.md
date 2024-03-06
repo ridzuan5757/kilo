@@ -285,3 +285,78 @@ void enableRawMode(){
 
 Our global variable containing our editor state is named `E`. We must replace
 all occurence of `orig_termios` with `E.orig_termios`;
+
+# Window size
+
+On my systems, we should able to gget the size of the terminal by simply calling
+`ioctl()` with `TIOCGWINSZ` request. `TIOCGWINSZ` stands for **T**erminal
+**I**nput/**O**utput **C**ontro**l** **G**et **WIN**dow **S**i**Z**e.
+
+```c
+#include <sys/ioctl.h>
+
+int getWindowSize(int *rows, int *cols){
+    struct winsize ws;
+
+    if(ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0){
+        return -1;
+    }else{
+        *cols = ws.ws_col;
+        *rows = ws.ws_row;
+        return 0;
+    }
+}
+```
+
+`ioctl()`, `TIOCGWINSZ`, and `struct winsize` come from `<sys/ioctl.h>`. On
+success, `iooctl()` will place the number of columns wide and number of rows
+high the terminal is into the given `winsize struct`. On failure, `ioctl()`
+returns `-1`. We also check to make sure the valuees it gave back were not `0`,
+because apparently that is possible erroneous outcome. If `ioctl()` failed in
+either way, we have `getWindowSize()` report failure by returning `-1`. If it
+succeeded, we pass the values back by setting the `int` reeferences that were
+passed to the function. This is a common approach to haaving functions returning
+multiple values in C. It also allows us to use the return value to indicate
+success or failure.
+
+Afterwards, we will add `screenrows` and `screencols` to our global editor
+state, and call `getWindowSize()` to fill in those values.
+
+```c
+struct editorConfig{
+    int screenrows;
+    int screencols;
+    struct termios orig_termios;
+}
+struct editorConfig E;
+
+void initEditor(){
+    if(getWindowSize(&E.screenrows, &E.screencols) == -1){
+        die("getWindowSize");
+    }
+}
+
+int main(){
+    enableRawMode();
+    initEditor();
+
+    while(1){
+        editorRefreshScreen();
+        editorProcessKeypress();
+    }
+
+    return 0;
+}
+```
+
+`initEditor()` will be used to initialize all the fields in `E` struct. This way
+we can display proper number of `~` on the screen.
+
+```c
+void editorDrawRows(){
+    int y;
+    for(y = 0; i < E.screenrows; y++){
+        write(STDOUT_FILENO, "~\r\n", 3);
+    }
+}
+```
