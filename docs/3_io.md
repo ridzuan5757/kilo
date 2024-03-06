@@ -208,3 +208,37 @@ We have two exit points we want to clear the screen at:
 
 We could use `atexit()` to clear the screen when our program exits, but then
 the error message printed by `die()` would be erased right after printing it.
+
+# Tildes
+
+Let's try draw a column of tildes `~` on the left hand side of the screen, like
+`vim` does. In the text editor, we will draw tilde at the beginning of any lines
+that come after the end of the file being edited.
+
+```c
+void editorDrawRows(){
+    int y;
+    for(y = 0; y < 24; y++){
+        write(STDOUT_FILENO, "~\r\n", 3);
+    }
+}
+
+void editorRefreshScreen(){
+    write(STDOUT_FILENO, "\x1b[2J", 4);
+    write(STDOUT_FILENO, "\x1b[H", 3);
+
+    editorDrawRows();
+
+    write(STDOUT_FILENO, "\x1b[H", 3);
+}
+```
+
+`editorDrawRows()` will handle drawing each row of the buffer of the text being
+edited. For now it draws a tilde in each row, which means that row is not part
+of the file and cannot contain any text.
+
+We do not know the size of the terminal yet, so we do not know how many rows we
+have to draw. For now, we just draw `24` rows.
+
+After we are done drawing, we do another `<esc>[H` escape sequence to reposition
+the cursor back up at the top left-corner.
