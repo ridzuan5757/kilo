@@ -360,3 +360,82 @@ void editorDrawRows(){
     }
 }
 ```
+
+# Improvement in window size implementation
+
+`ioctl()` is not guaranteed to be able to request the window size on all
+systems, so we are going to provide a fallback method of getting the window
+size.
+
+The strategy is to position the cursor at the bottom-right of the screen,
+then use escape sequences that let us query the position of the cursor. That
+tells us how many rows and columns there must be on the screen.
+
+```c
+int getWindowSize(int *rows, int *cols){
+    struct winsize ws;
+
+    if(1 || ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0){
+        if(write(STDOUT_FILENO. "\x1b[999C\x1b[998B", 12) != 12){
+            return -1;
+        }
+
+        editorReadKey();
+        return -1;
+    }else{
+        *cols = ws.ws_col;
+        *rows = ws.ws_row;
+        return 0;
+    }
+}
+```
+
+The implementation of moving the cursor to the bottom-right corner is not
+exactly straightforward. We are sending two escape sequences one after the
+other. The `C` command **cursor forward** and the `B` command **cursor down**
+moves the cursor down. The argument says how much to move it to the right or
+down by. We use a very large value, `999`, which should ensure that the cursor
+reaches the right and bottom edges of the screen.
+
+The `C` and `B` commands are specifically documented to stop the cursor from
+going past the edge of the screen. The reason we do not use the `<esc>[999;999H`
+command is that the documentation does not specify what happens if we try to
+move the cursor off-screen.
+
+Notice that we are sticking a `1 ||` at the front of the `if` statement
+temporarily, so that we can test this fallback branch that we are developing.
+
+Because we are always returning `-1` (meaning an error occurred) from 
+`getWindowSize()` at this point, we make a call to `editorReadKey()`, so we can
+observe the results of our escape sequences before the program calls `die()` and
+clears the screen. When we run the program, we should see the cursor is
+positioned at the bottom-right corner of the screen, and when we press a key we
+will see the error message printed by `die()` after it clears the screen.
+
+Next we need to get the cursor position. The `n` command (device status report)
+can be used to query the terminal for the status information. We want to give an
+argument of `6` to ask for the cursor position. Then we can read the reply from
+the standard input. Let's print out each character from the standard input to
+see what the reply looks like.
+
+```c
+int getCursorPosition(int *rows, int* cols){
+    if(write(STDOUT_FILENO, "\x1b[6n", 4) != 4){
+        return -1;
+    }
+
+    printf("\r\n");
+    char c;
+    while(read(STDIN_FILENO, &c, 1) == 1){
+        if(iscntrl(c)){
+            printf("%d\r\n", c);
+        }else{
+            printf("%d ('%c')\r\n", c, c);
+        }
+    }
+
+    editorReadKey();
+    return -1;
+}
+
+```
