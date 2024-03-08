@@ -439,3 +439,123 @@ int getCursorPosition(int *rows, int* cols){
 }
 
 ```
+
+The reply is an escape sequence! It is an escape character `27`, followed by a
+`[` character, and then the actual response: `24:80R`, or similar. This escape
+sequence is documented as Cursor Position Report.
+
+As before, we have inserted a temporary call to `editorReadKey()` to let us
+observe our debug output before the screen gets cleared on exit.
+
+If we are using Bash on Windows, `read()` does not time out, so we will be stuck
+in an infinite loop. We will have to kill the process externally, or exit and
+reopen the command prompt window.
+
+We are going to parse this response. But first, let's read it into the buffer.
+We will keep reading characters until we get to `R` character.
+
+```c
+int getCursorPosition(int *rows, int *cols){
+    char buf[32];
+    unsigned int i = 0;
+
+    if(write(STDOUT_FILENO, "\x1b[6n", 4) != 4){
+        return -1;
+    }
+
+    while(i < sizeof(buf) - 1){
+        if(read(STDIN_FILENO, &buf[i], 1) != 1){
+            break;
+        }
+
+        if(buf[i] == 'R'){
+            break;
+        }
+
+        i++;
+    }
+
+    buf[i] = '\0';
+
+    printf("\r\n&buf[1] : '%s'\r\n", &buf[1]);
+    editorReadKey();
+
+    return -1;
+}
+```
+
+When we print out the buffer, we do not want to print the '\x1b' character,
+because the terminal would interpret it as an escape sequence and would not
+display it. So we skip the first character in `buf` by passing `&buf[1]` to
+`printf()`. `printf()` expects strings to end with a `0` byte, so we make sure
+to assign `'\0'` to the final byte of `buf`.
+
+If we run the program, we will see we have the response in `buf` in the form of
+`<esc>[24;80`. Let's first parse the two numbers out of there using `sscanf()`:
+
+```c
+int getCursorPosition(int *rows, int *cols){
+    char buf[32];
+    unsigned int i = 0;
+
+    if(write(STDOUT_FILENO, "\x1b[6n", 4) != 4){
+        return -1;
+    }
+
+    while(i < sizeof(buf) - 1){
+        if(read(STDIN_FILENO, &buf[i], 1) != 1){
+            break;
+        }
+
+        if(buf[i] == 'R'){
+            break;
+        }
+
+        i++;
+    }
+    buf[i] = '\0';
+
+    if(buf[0] != '\x1b' || buf[1] != '['){
+        return -1;
+    }
+
+    if(sscanf(&buf[2], "%d;%d", rows, cols) != 2){
+        return -1;
+    }
+
+    return 0;
+}
+
+```
+
+`sscanf()` from `<stdio.h>`. First we make sure it responded with an escape
+sequence. Then we pass a pointer to the third character of `buf` to `sscanf()`,
+skipping the `\x1b` and `[` characters. So we are passing a string of the form
+`24;80` to `sscanf()`. We are also passing it the string `%d:%d` which tells it
+to parse two integers separated by `;`, and put the values into `rows` and 
+`cols` variables.
+
+Our fallback method for getting the window size is now complete. We should see
+that `editorDrawRows()` prints the correct number of tildes for the height of
+our terminal.
+
+Now that we know how that works, let's remove `1 ||` we put in the `if`
+condition temporarily.
+
+```c
+int getWindowSize(int *rows, int *cols){
+    struct winsize ws;
+
+    if(ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0){
+        if(write(STDOUT_FILENO, "\x1b[999C\x1b[998B", 12) != 12){
+            return -1;
+        }
+
+        return getCursorPosition(rows, cols);
+    }else{
+        *cols = ws.ws_col;
+        *rows = ws.ws_row;
+        return 0;
+    }
+}
+```
