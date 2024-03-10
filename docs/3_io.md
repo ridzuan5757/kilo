@@ -711,3 +711,49 @@ used for this reference does not document `?25` which we use above. It appears
 the cursor hiding/showing the cursor, but if the do not, then they just ignore
 those escape sequences, which is not a big deal in this case.
 
+# Clearing lines one at a time.
+
+Instead of clearing entire screen before each refresh, it seems more optimal to
+clear each line as we redraw them. Let's remove the `<esc>[2J` (clear entire
+screen) escape sequence, and instead put a `<esc>[K` sequence at the end of
+each line we draw.
+
+```c
+void editorDrawRows(struct abuf *ab){
+    int y;
+
+    for(y = 0; y < E.screenrows; y++){
+        abAppend(ab, "~", 1);
+
+
+        abAppend(ab, "\x1b[K", 3);
+        if(y < E.screenrows - 1){
+            abAppend(ab, "\r\n", 2);
+        }
+    }
+}
+
+void editorRefreshScreen(){
+    struct abuf ab = ABUF_INIT;
+
+    abAppend(&ab, "\x1b[?25l", 6);
+    abAppend(&ab, "\x1b[H", 3);
+
+    editorDrawRows(&ab);
+
+    abAppend(&ab, "\x1b[H", 3);
+    abAppend(&ab, "\x1b[?25h", 6);
+
+    write(STDOUT_FILENO, ab.b, ab.len);
+    abFree(&ab);
+}
+```
+
+The `K` (erase in line) command used after printing tilde is used to erase part
+of the current line. It's argument is analogous to the `J` command's argument:
+- `2` erases the whole line.
+- `1` erases the part of the line to the left of the cursor.
+- `0` erases the part of the line to the right of the cursor.
+
+`0` is the default argument, and that is what we want, so wee leave out the
+argument and just use `<esc>K`.
