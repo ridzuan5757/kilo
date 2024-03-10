@@ -51,7 +51,7 @@ void enableRawMode(void) {
   }
 }
 
-char editorReadKey() {
+char editorReadKey(void) {
   int nread;
   char c;
 
@@ -135,7 +135,7 @@ void abAppend(struct abuf *ab, const char *s, int len) {
 
 void abFree(struct abuf *ab) { free(ab->b); }
 
-void editorProcessKeypress() {
+void editorProcessKeypress(void) {
   char c = editorReadKey();
 
   switch (c) {
@@ -168,7 +168,7 @@ void editorDrawRows(struct abuf *ab) {
   }
 }
 
-void editorRefreshScreen() {
+void editorRefreshScreen(void) {
   struct abuf ab = ABUF_INIT;
 
   abAppend(&ab, "\x1b[?25l", 6);
@@ -183,7 +183,7 @@ void editorRefreshScreen() {
   abFree(&ab);
 }
 
-void initEditor() {
+void initEditor(void) {
   if (getWindowSize(&E.screenrows, &E.screencols) == -1) {
     die("getWindowSize");
   }
