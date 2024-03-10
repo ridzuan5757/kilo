@@ -677,3 +677,37 @@ assigning `ABUF_INIT` to it. We then replace each occurence of
 `editorDrawRows()`, so it too can use `abAppend()`. Lastly, we `write()` the
 buffer's contents out to standard output, and free the memory used by the
 `abuf`.
+
+# Hide cursor when repainting
+
+There is another possible source of flickering effect we have to take care. It
+is possible that the cursor might be displayed in the middle of the screen
+somewhere for a split second while the terminal is drawing to the screen. To
+make sure that does not happen, let's hide the cursor before refreshing the
+screen, and show it again immediately after the refresh finishes.
+
+```c
+void editorRefreshScreen(){
+    struct abuf ab = ABUF_INIT;
+
+    abAppend(&ab, "\x1b[?25l", 6);
+    abAppend(&ab, "\x1b[2J", 4);
+    abAppend(&ab, "\x1b[H", 3);
+
+    editorDrawRows(&ab);
+
+    abAppend(&ab, "\x1b[H", 3);
+    abAppend(&ab, "\x1b[?25h", 6);
+
+    write(STDOUT_FILENO, ab.b, ab.len);
+    abFree(&ab);
+}
+```
+
+We use escape sequence to tell the terminal to hide the terminal to hide and
+show the cursor. The `h` and `l` commands (set mode, reset mode) are used to
+turn on and turn off various terminal features or modes. The VT100 User Guide
+used for this reference does not document `?25` which we use above. It appears
+the cursor hiding/showing the cursor, but if the do not, then they just ignore
+those escape sequences, which is not a big deal in this case.
+
