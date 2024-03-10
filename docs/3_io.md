@@ -581,3 +581,99 @@ void editorDrawRows(){
     }
 }
 ```
+
+# Append buffer
+
+It is generally not a good idea to make a whole bunch of small `write()`'s 
+everytime we refresh the screen. It would be better to do one big `write()`, to
+make sure the whole screen updates at once. Otherwise there could be small
+unpredictable pauses between `write()`'s, which could cause flicker effect.
+
+We want to replace all of our `write()` calls with code that appends the string
+to a buffer, and then `write()` this buffer at our end. Unfortunately, C does
+not have dynamic strings, so we will create our own dynamic string type that
+implement buffer appending.
+
+```c
+struct abuf{
+    char *b;
+    int len;
+}
+```
+
+An append buffer consists of a pointer to our buffer in memory, an a lenth. We
+define an `ABUF_INIT` constant which represents an empty buffer. This acts as a
+constructor for our `abuf` type. We will also implement `abAppend()` operation
+as well as `abFree()` destructor.
+
+```c
+#include <string.h>
+
+void abAppend(struct abuf *ab, const char *s, int len){
+    char *new = realloc(ab->b, ab->len + len);
+
+    if(new == NULL){
+        return;
+    }
+
+    memcpy(&new[ab->len], s, len);
+    ab->b = new;
+    ab->len += len;
+}
+
+void abFree(struct abuf *ab){
+    free(ab->b);
+}
+```
+
+`realloc()` and `free()` come from `<stdlib.h>` while `memcpy` comes from
+`<string.h>`.
+
+To append a string `s` to an `abuf`, the first thing we do is make sure we
+allocate enough memory to hold the new stirng. We ask `realloc()` to give us
+block of memory that is the size of the current string plus size of the string
+that we are appending. `realloc()` will either extend the size of the block of
+memory we already have allocated, or it will take care of `free()`-ing the
+current block of memory and allocating a new block of memory somewhere that is
+big enough for our string.
+
+Then we use `memcpy()` to copy the string `s` after the end of the current data
+in the buffer, and we update the pointer and length of the `abuf` to the new
+values.
+
+`abFree()` is a destructor that deallocates the dynamic memory used by an
+`abuf`. Now `abuf` type is ready to be used.
+
+```c
+void editorDrawRows(struct abuf *ab){
+    int y;
+    for(y=0; y<E.screenrows; y++){
+        abAppend(ab, "~", 1);
+
+        if(y < E,screenrows - 1){
+        abAppend(ab, "\r\n", 2);
+        }
+    }
+}
+
+void editorRefreshScreen(){
+    struct abuf ab = ABUF_INIT;
+
+    abAppend(&ab, "\x1b[2J", 4);
+    abAppend(&ab, "\x1b[H", 3);
+
+    editorDrawRows(&ab);
+
+    abAppend(&ab, "\x1b[H", 3);
+
+    write(STDOUT_FILENO, ab.b, ab.len);
+    abFree(&ab);
+}
+```
+
+In `editorRefreshScreen()`, we first initialize a new `abuf` called `ab`, by
+assigning `ABUF_INIT` to it. We then replace each occurence of
+`write(STDOUT_FILENO, ...)` with `abAppend(&ab, ...)`. We also pass `ab` into
+`editorDrawRows()`, so it too can use `abAppend()`. Lastly, we `write()` the
+buffer's contents out to standard output, and free the memory used by the
+`abuf`.
