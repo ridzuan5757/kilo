@@ -581,3 +581,26 @@ void editorDrawRows(){
     }
 }
 ```
+
+# Last line tilde
+
+The last line of the screen does not seem to have a tilde. That is because of a
+small bug in our code. When we print the final tilde, we then print a "\r\n"
+like on any other line, but this causes the terminal to scroll in order to make
+room for a new, blank line. Let's make the last line an exception when we print
+our "\r\n"'s.
+
+```c
+void editorDrawRows(){
+    int y;
+    for(y = 0; y < E.screenrows; y++){
+        write(STDOUT_FILENO, "~", 1);
+
+        if(y < E.screenrows - 1){
+            write(STDOUT_FILENO, "\r\n", 2);
+        }
+    }
+}
+```
+
+
