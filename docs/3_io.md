@@ -750,10 +750,51 @@ void editorRefreshScreen(){
 ```
 
 The `K` (erase in line) command used after printing tilde is used to erase part
-of the current line. It's argument is analogous to the `J` command's argument:
+of the current line. Its argument is analogous to the `J` command's argument:
 - `2` erases the whole line.
 - `1` erases the part of the line to the left of the cursor.
 - `0` erases the part of the line to the right of the cursor.
 
 `0` is the default argument, and that is what we want, so wee leave out the
 argument and just use `<esc>K`.
+
+# Welcome message.
+
+Let's display the name of the editor and a version number a third way down the
+screen.
+
+```c
+void editorDrawRows(struct abuf *ab){
+    int y;
+    for(y = 0; y < E.screenrows; y++){
+        if(y == E.screenrows / 3){
+            char welcome[80];
+            int wecomelen = snprintf(
+                welcome, 
+                sizeof(welcome),
+                "Kilo editor -- version %s",
+                KILO_VERSION
+            );
+            
+            if(wecomelen > E.screencols){
+                wecomelen = E.screencols;
+            }
+
+            abAppend(ab, welcome, welcomelen);
+        }else{
+            abAppend(ab, "~", 1);
+        }
+
+        abAppend(ab, "\x1b[K", 3);
+        
+        if(y < E.screenrows - 1){
+            abAppend(ab, "\r\n", 2);
+        }
+    }
+}
+```
+
+`snprintf()` comes from `<stdio.h>`. We use the welcome buffer and `snprintf()`
+to interpolate our `KILO_VERSION` string into the welcome message. We also
+truncate the length of the screen in case the terminal is too tiny to fit the
+welcome message.
