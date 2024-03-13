@@ -581,3 +581,220 @@ void editorDrawRows(){
     }
 }
 ```
+
+# Append buffer
+
+It is generally not a good idea to make a whole bunch of small `write()`'s 
+everytime we refresh the screen. It would be better to do one big `write()`, to
+make sure the whole screen updates at once. Otherwise there could be small
+unpredictable pauses between `write()`'s, which could cause flicker effect.
+
+We want to replace all of our `write()` calls with code that appends the string
+to a buffer, and then `write()` this buffer at our end. Unfortunately, C does
+not have dynamic strings, so we will create our own dynamic string type that
+implement buffer appending.
+
+```c
+struct abuf{
+    char *b;
+    int len;
+}
+```
+
+An append buffer consists of a pointer to our buffer in memory, an a lenth. We
+define an `ABUF_INIT` constant which represents an empty buffer. This acts as a
+constructor for our `abuf` type. We will also implement `abAppend()` operation
+as well as `abFree()` destructor.
+
+```c
+#include <string.h>
+
+void abAppend(struct abuf *ab, const char *s, int len){
+    char *new = realloc(ab->b, ab->len + len);
+
+    if(new == NULL){
+        return;
+    }
+
+    memcpy(&new[ab->len], s, len);
+    ab->b = new;
+    ab->len += len;
+}
+
+void abFree(struct abuf *ab){
+    free(ab->b);
+}
+```
+
+`realloc()` and `free()` come from `<stdlib.h>` while `memcpy` comes from
+`<string.h>`.
+
+To append a string `s` to an `abuf`, the first thing we do is make sure we
+allocate enough memory to hold the new stirng. We ask `realloc()` to give us
+block of memory that is the size of the current string plus size of the string
+that we are appending. `realloc()` will either extend the size of the block of
+memory we already have allocated, or it will take care of `free()`-ing the
+current block of memory and allocating a new block of memory somewhere that is
+big enough for our string.
+
+Then we use `memcpy()` to copy the string `s` after the end of the current data
+in the buffer, and we update the pointer and length of the `abuf` to the new
+values.
+
+`abFree()` is a destructor that deallocates the dynamic memory used by an
+`abuf`. Now `abuf` type is ready to be used.
+
+```c
+void editorDrawRows(struct abuf *ab){
+    int y;
+    for(y=0; y<E.screenrows; y++){
+        abAppend(ab, "~", 1);
+
+        if(y < E,screenrows - 1){
+        abAppend(ab, "\r\n", 2);
+        }
+    }
+}
+
+void editorRefreshScreen(){
+    struct abuf ab = ABUF_INIT;
+
+    abAppend(&ab, "\x1b[2J", 4);
+    abAppend(&ab, "\x1b[H", 3);
+
+    editorDrawRows(&ab);
+
+    abAppend(&ab, "\x1b[H", 3);
+
+    write(STDOUT_FILENO, ab.b, ab.len);
+    abFree(&ab);
+}
+```
+
+In `editorRefreshScreen()`, we first initialize a new `abuf` called `ab`, by
+assigning `ABUF_INIT` to it. We then replace each occurence of
+`write(STDOUT_FILENO, ...)` with `abAppend(&ab, ...)`. We also pass `ab` into
+`editorDrawRows()`, so it too can use `abAppend()`. Lastly, we `write()` the
+buffer's contents out to standard output, and free the memory used by the
+`abuf`.
+
+# Hide cursor when repainting
+
+There is another possible source of flickering effect we have to take care. It
+is possible that the cursor might be displayed in the middle of the screen
+somewhere for a split second while the terminal is drawing to the screen. To
+make sure that does not happen, let's hide the cursor before refreshing the
+screen, and show it again immediately after the refresh finishes.
+
+```c
+void editorRefreshScreen(){
+    struct abuf ab = ABUF_INIT;
+
+    abAppend(&ab, "\x1b[?25l", 6);
+    abAppend(&ab, "\x1b[2J", 4);
+    abAppend(&ab, "\x1b[H", 3);
+
+    editorDrawRows(&ab);
+
+    abAppend(&ab, "\x1b[H", 3);
+    abAppend(&ab, "\x1b[?25h", 6);
+
+    write(STDOUT_FILENO, ab.b, ab.len);
+    abFree(&ab);
+}
+```
+
+We use escape sequence to tell the terminal to hide the terminal to hide and
+show the cursor. The `h` and `l` commands (set mode, reset mode) are used to
+turn on and turn off various terminal features or modes. The VT100 User Guide
+used for this reference does not document `?25` which we use above. It appears
+the cursor hiding/showing the cursor, but if the do not, then they just ignore
+those escape sequences, which is not a big deal in this case.
+
+# Clearing lines one at a time.
+
+Instead of clearing entire screen before each refresh, it seems more optimal to
+clear each line as we redraw them. Let's remove the `<esc>[2J` (clear entire
+screen) escape sequence, and instead put a `<esc>[K` sequence at the end of
+each line we draw.
+
+```c
+void editorDrawRows(struct abuf *ab){
+    int y;
+
+    for(y = 0; y < E.screenrows; y++){
+        abAppend(ab, "~", 1);
+
+
+        abAppend(ab, "\x1b[K", 3);
+        if(y < E.screenrows - 1){
+            abAppend(ab, "\r\n", 2);
+        }
+    }
+}
+
+void editorRefreshScreen(){
+    struct abuf ab = ABUF_INIT;
+
+    abAppend(&ab, "\x1b[?25l", 6);
+    abAppend(&ab, "\x1b[H", 3);
+
+    editorDrawRows(&ab);
+
+    abAppend(&ab, "\x1b[H", 3);
+    abAppend(&ab, "\x1b[?25h", 6);
+
+    write(STDOUT_FILENO, ab.b, ab.len);
+    abFree(&ab);
+}
+```
+
+The `K` (erase in line) command used after printing tilde is used to erase part
+of the current line. Its argument is analogous to the `J` command's argument:
+- `2` erases the whole line.
+- `1` erases the part of the line to the left of the cursor.
+- `0` erases the part of the line to the right of the cursor.
+
+`0` is the default argument, and that is what we want, so wee leave out the
+argument and just use `<esc>K`.
+
+# Welcome message.
+
+Let's display the name of the editor and a version number a third way down the
+screen.
+
+```c
+void editorDrawRows(struct abuf *ab){
+    int y;
+    for(y = 0; y < E.screenrows; y++){
+        if(y == E.screenrows / 3){
+            char welcome[80];
+            int wecomelen = snprintf(
+                welcome, 
+                sizeof(welcome),
+                "Kilo editor -- version %s",
+                KILO_VERSION
+            );
+            
+            if(wecomelen > E.screencols){
+                wecomelen = E.screencols;
+            }
+
+            abAppend(ab, welcome, welcomelen);
+        }else{
+            abAppend(ab, "~", 1);
+        }
+
+        abAppend(ab, "\x1b[K", 3);
+        
+        if(y < E.screenrows - 1){
+            abAppend(ab, "\r\n", 2);
+        }
+    }
+}
+```
+
+`snprintf()` comes from `<stdio.h>`. We use the welcome buffer and `snprintf()`
+to interpolate our `KILO_VERSION` string into the welcome message. We also
+truncate the length of the screen in case the terminal is too tiny to fit the
+welcome message.
