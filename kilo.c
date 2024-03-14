@@ -70,6 +70,7 @@ void editorProcessKeypress(void) {
 
   switch (c) {
   case CTRL_KEY('q'):
+    editorRefreshScreen();
     exit(0);
     break;
   }
