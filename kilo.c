@@ -53,6 +53,11 @@ char editorReadKey(void) {
   return c;
 }
 
+void editorRefreshScreen(void) {
+  // VT100 erase in display
+  write(STDOUT_FILENO, "\x1b[2J", 4);
+}
+
 void editorProcessKeypress(void) {
   char c = editorReadKey();
 
@@ -67,6 +72,7 @@ int main(void) {
   enableRawMode();
 
   while (1) {
+    editorRefreshScreen();
     editorProcessKeypress();
   }
   return 0;
