@@ -10,6 +10,11 @@
 struct termios orig_termios;
 
 void die(const char *s) {
+  // VT100 erase in display
+  write(STDOUT_FILENO, "\x1b[2J", 4);
+  // VT100 cursor position
+  write(STDOUT_FILENO, "\x1b[H", 3);
+
   perror(s);
   exit(1);
 }
