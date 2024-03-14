@@ -56,6 +56,8 @@ char editorReadKey(void) {
 void editorRefreshScreen(void) {
   // VT100 erase in display
   write(STDOUT_FILENO, "\x1b[2J", 4);
+  // VT100 cursor position
+  write(STDOUT_FILENO, "\x1b[H", 3);
 }
 
 void editorProcessKeypress(void) {
