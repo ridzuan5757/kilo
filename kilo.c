@@ -147,6 +147,8 @@ void editorDrawRows(struct abuf *ab) {
   for (y = 0; y < E.screenrows; y++) {
     abAppend(ab, "~", 1);
 
+    // VT100 K - erase in line
+    abAppend(ab, "\x1b[K", 3);
     if (y < E.screenrows - 1) {
       abAppend(ab, "\r\n", 2);
     }
@@ -159,7 +161,7 @@ void editorRefreshScreen(void) {
   // VT 100 l - reset mode
   abAppend(&ab, "\x1b[?25l", 6);
   // VT100 J - erase in display
-  abAppend(&ab, "\x1b[2J", 4);
+  // abAppend(&ab, "\x1b[2J", 4);
   // VT100 H - cursor position
   abAppend(&ab, "\x1b[H", 3);
 
