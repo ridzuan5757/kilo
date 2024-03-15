@@ -11,6 +11,8 @@
 #define CTRL_KEY(k) (k & 0x1f)
 
 struct editorConfig {
+  int cx;
+  int cy;
   int screenrows;
   int screencols;
   struct termios orig_termios;
@@ -190,12 +192,32 @@ void editorRefreshScreen(void) {
 
   editorDrawRows(&ab);
 
-  abAppend(&ab, "\x1b[H", 3);
+  char buf[32];
+  snprintf(buf, sizeof(buf), "\x1b[%d;%dH", E.cy + 1, E.cx + 1);
+  abAppend(&ab, buf, strlen(buf));
+
   // VT 100 h - set mode
   abAppend(&ab, "\x1b[?25h", 6);
 
   write(STDOUT_FILENO, ab.b, ab.len);
   abFree(&ab);
+}
+
+void editorMoveCursor(char key) {
+  switch (key) {
+  case 'a':
+    E.cx--;
+    break;
+  case 'd':
+    E.cx++;
+    break;
+  case 'w':
+    E.cy--;
+    break;
+  case 's':
+    E.cy++;
+    break;
+  }
 }
 
 void editorProcessKeypress(void) {
@@ -207,10 +229,20 @@ void editorProcessKeypress(void) {
     write(STDOUT_FILENO, "\x1b[H", 3);
     exit(0);
     break;
+
+  case 'w':
+  case 'a':
+  case 's':
+  case 'd':
+    editorMoveCursor(c);
+    break;
   }
 }
 
 void initEditor(void) {
+  E.cx = 0;
+  E.cy = 0;
+
   if (getWindowSize(&E.screenrows, &E.screencols) == -1) {
     die("getWindowSize");
   }
