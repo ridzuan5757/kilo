@@ -847,3 +847,105 @@ void editorDrawRows(struct abuf *ab){
     }
 }
 ```
+
+# Cursor movement
+
+We want the user to be able to move the cursor around. The first step is to keep
+track of the cursor `xy`-position in the global editor state.
+
+```c
+struct editorConfig{
+    int cx;
+    int cy;
+    int screenrows;
+    int screencols;
+    struct termios orig_termios;
+};
+
+struct editorConfig E;
+
+void initEditor(){
+    E.cx = 0;
+    E.cy = 0;
+
+    if(getWindowSize(&E.screenrows, &E.screencols) != -1){
+        die("getWindowSize");
+    }
+}
+```
+
+`E.cx` is the horizontal coordinate of the cursor (column) and `E.cy` is the
+vertical coordinate (row). We initialize both of them to `0`, as we want the
+cursor to start at the top-left of the screen. Since C language uses indexes
+that start from `0`, we will use 0-indexed values wherever possible.
+
+`editorRefreshScreen()` will be used to move the cursor to the position stored
+in `E.cx` and `E.cy`.
+
+```c
+void editorRefreshScreen(){
+    struct abuf ab = ABUF_INIT;
+
+    abAppend(&ab, "\x1b[?25l", 6);
+    abAppend(&ab, "\x1b[H", 3);
+
+    editorDrawRows(&ab);
+
+    char buf[32];
+    snprintf(buf, sizeof(buf), "\x1b[%d;%dH", E.cy + 1, E.cx + 1);
+    abAppend(&ab, buf, strlen(buf));
+
+    abAppend(&ab, "\x1b[?25h", 6);
+
+    write(STDOUT_FILENO, ab.b, ab.len);
+    abFree(&ab);
+}
+```
+
+`strlen()` comes from `<string.h>`. We changed the old `H` command into an `H`
+command with arguments, specifying the exact position we want the cursor to move
+to.
+
+We add `1` to `E.cy` and `E.cx` to convert from 0-indexed values to the
+1-indexed values that the terminal uses. At this point, we could try
+initializing `E.cx` to `10` or something, or insert `E.cx++` into the main loop,
+to confirm the code works as intended sor far. Next, we will allow the user to 
+move the cursor using `w`, `a`, `s`, `d` keys.
+
+```c
+void editorMoveCursor(char key){
+    switch(key){
+        case 'a';
+            E.cx--;
+            break;
+        case 'd';
+            E.cx++;
+            break;
+        case 'w';
+            E.cy--;
+            break;
+        case 's':
+            E.cy++;
+            break;
+    }
+}
+
+void editorProcessKeypress(){
+    char c = editorReadKey();
+
+    switch(c){
+        case CTRL_KEY('q'):
+            write(STDOUT_FILENO, "\x1b[2J", 4);
+            write(STDOUT_FILENO, "\x1b[H", 3);
+            exit(0);
+            break;
+
+        case 'w':
+        case 'a':
+        case 's':
+        case 'd':
+            editorMoveCursor(c);
+            break;
+    }
+}
+```
