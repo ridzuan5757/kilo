@@ -798,3 +798,52 @@ void editorDrawRows(struct abuf *ab){
 to interpolate our `KILO_VERSION` string into the welcome message. We also
 truncate the length of the screen in case the terminal is too tiny to fit the
 welcome message.
+
+To center a string, we obtain the padding value by dividing the screen width by
+`2`, then we subtract half of the string's length from that. In other words:
+`(E.screencols - welcomelen) / 2`. That tells us how far from the edge of the
+screen we should start printing the string. So we fill that space with space
+characters, except for the first character, which should be tilde.
+
+```c
+void editorDrawRows(struct abuf *ab){
+   
+    int y;
+    for(y = 0; y < E.screenrows; y++){
+        
+        char welcome[80];
+        int welcomelen = snprintf(
+            welcome,
+            sizeof(welcome),
+            "Kilo editor -- version %s",
+            KILO_VERSION
+        );
+        
+        if(welcomelen > E.screencols){
+            welcomelen = E.screencols;
+        }
+
+        int padding = (E.screencols - welcomelen) / 2;
+        
+        if(padding){
+            abAppend(ab, "~", 1);
+            padding--;
+        }
+
+        while(padding--){
+            abAppend(ab, " ", 1);
+        }
+
+        abAppend(ab, welcome, welcomelen);
+    }else{
+        abAppend(ab, "~", 1);
+    }
+
+    // VT100 K - clear line from cursor right 
+    abAppend(ab, "\x1b[K", 3);
+
+    if(y < E.screenrows - 1){
+        abAppend(ab, "\r\n", 2);
+    }
+}
+```
