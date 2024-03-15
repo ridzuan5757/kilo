@@ -949,3 +949,17 @@ void editorProcessKeypress(){
     }
 }
 ```
+
+# Arrow keys movement
+
+Now that we have a way of mapping keypresses to move the cursor, let's replace
+the `WASD` keys with the arrow keys. We saw that pressing an arrow key sends
+multiple bytes as input to our program. These bytes are in form of an escape
+sequence that start with `\x1b`, `[`, followed by an `A`, `B`, `C`, or `D`
+depending on which of the four arrow keys was pressed. We will read escape
+sequences of this form as a single keypress.
+
+```c
+
+```
+
