@@ -156,14 +156,18 @@ void editorDrawRows(struct abuf *ab) {
 void editorRefreshScreen(void) {
   struct abuf ab = ABUF_INIT;
 
-  // VT100 erase in display
+  // VT 100 l - reset mode
+  abAppend(&ab, "\x1b[?25l", 6);
+  // VT100 J - erase in display
   abAppend(&ab, "\x1b[2J", 4);
-  // VT100 cursor position
+  // VT100 H - cursor position
   abAppend(&ab, "\x1b[H", 3);
 
   editorDrawRows(&ab);
 
   abAppend(&ab, "\x1b[H", 3);
+  // VT 100 h - set mode
+  abAppend(&ab, "\x1b[?25h", 6);
 
   write(STDOUT_FILENO, ab.b, ab.len);
   abFree(&ab);
