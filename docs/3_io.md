@@ -1166,3 +1166,111 @@ void editorMoveCursor(int key){
 }
 ```
 
+# `Page Up` and `Page Down` keys.
+
+We also need to detect a few more special keypresses that use escape sequences,
+like the arrow keys did. We will start with the `Page Up` and `Page Down` keys.
+`Page Up` is sent as `<esc>[5~` and `Page Down` is sent as `<esc>[6~`.
+
+```c
+enum editorKey{
+    ARROW_LEFT = 1000,
+    ARROW_RIGHT,
+    ARROW_UP,
+    ARROW_DOWN,
+    PAGE_UP,
+    PAGE_DOWN
+}
+
+int editorReadKey(){
+    int nread;
+    char c;
+    while((nread = read(STDIN_FILENO, &c, 1)) != 1){
+        if(nread == -1 && errno != EAGAIN){
+            die("read");
+        }
+    }
+
+    if(c == '\x1b'){
+        char seq[3];
+
+        if(read(STDIN_FILENO, &seq[0], 1) != 1){
+            return '\x1b';
+        }
+
+        if(read(STDIN_FILENO, &seq[1], 1) != 1){
+            return '\x1b';
+        }
+
+        if(seq[0] == '['){
+            if(seq[1] >= '0' && seq[1] <= '9'){
+                
+                if(read(STDIN_FILENO, &seq[2], 1) != 1){
+                    return '\x1b';
+                }
+
+                if(seq[2] == '~'){
+                    switch(seq[1]){
+                        case '5': return PAGE_UP;
+                        case '6': return PAGE_DOWN;
+                    }
+                }
+            }else{
+                case 'A': return ARROW_UP;
+                case 'B': return ARROW_DOWN;
+                case 'C': return ARROW_RIGHT;
+                case 'D': return ARROW_LEFT;
+            }
+        }
+        
+    }
+    return '\x1b';
+    }else{
+        return c;
+    }
+}
+```
+
+If the byte after `[` is a digit, we will try to read the next byte expecting it
+to be `~`. Then we test the digit byte to see if it is `5` or `6`. We will use
+`Page Up` and `Page Down` to move the cursor to top and bottom of the screen.
+
+```c
+void editorProcessKeypress(){
+    int c = editorReadKey();
+
+    switch(c){
+        case CTRL_KEY('q'):
+            write(STDOUT_FILENO, "\x1b[2J", 4);
+            write(STDOUT_FILENO, "\x1b[H", 3);
+            exit(0);
+            break;
+
+        case PAGE_UP:
+        case PAGE_DOWN:
+            {
+                int times = E.screenrows;
+                while(time--){
+                    editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
+                }
+            }
+            break;
+
+        case ARROW_UP:
+        case ARROW_DOWN:
+        case ARROW_LEFT:
+        case ARROW_RIGHT:
+            editorMoveCursor(c);
+            break;
+    }
+}
+```
+
+We create code block with that pair of braces so that we are allowerd to declare
+the `times` variable since we cannot declare variables directly inside a 
+`switch` statement. We simulate the user pressing `Arrow Up` and `Arrow Down` 
+keys enough times to move to the top or bottom of the screen. Implementation of
+`Page Up` and `Page Down` this way will become lot easier as we will also
+implement scrolling function. If we are on a machine with `Fn` key, we may be
+able to press `Fn + Arrow Up` and `Fn + Arrow Down` to simulate pressing the
+`Page Up` and `Page Down` keys.
