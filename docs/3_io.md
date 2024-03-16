@@ -960,6 +960,173 @@ depending on which of the four arrow keys was pressed. We will read escape
 sequences of this form as a single keypress.
 
 ```c
+char editorReadKey(){
+    int nread;
+    char c;
 
+    while((nread = read(STDIN_FILENO, &c, 1)) != 1){
+        if(nread == -1 errno != EAGAIN){
+            die("read");
+        }
+    }
+
+    if(c == '\x1b'){
+        char seq[3];
+
+        if(read(STDIN_FILENO, &seq[0], 1) != 1){
+            return '\x1b';
+        }
+
+        if(read(STDIN_FILENO, &seq[1], 1) != 1){
+            return '\x1b';
+        }
+
+        if(seq[0] == '['){
+            switch(seq[1]){
+                case 'A': return 'w';
+                case 'B': return 's';
+                case 'C': return 'd';
+                case 'D': return 'a';
+            }
+        }
+
+        return '\x1b';
+    }else{
+        return c;
+    }
+}
 ```
+
+If we read an escape character, we immediately read two or more bytes into the
+`seq` buffer. If either of these reads time out after 0.1 seconds, then we
+assume the user just pressed the `<esc>` key and return that. Otherwise we look
+to see if the escape sequence is an arrow key escape sequence. If it is, we just
+return the corresponding `WASD` character, for now. If it is not an escape
+sequence that we are expecting, we just return the escape character.
+
+We make the `seq` buffer to be 3 bytes long because we might be handling longer
+escape sequence in the future. We basically aliased the arrow keys to the `WASD`
+keys. This gets the arrow keys working immediately, but leaves `WASD` keys still
+mapped to `editorMoveCursor()` function. What we want is for `editorReadKey()`
+to return special values for each arrow key that let us identify that a
+particular arrow key was pressed.
+
+This can be implemented by first replacing each instance of the `WASD`
+characters with the constants `ARROW_UP`, `ARROW_LEFT`, `ARROW_DOWN`,
+`ARROW_RIGHT`.
+
+```c
+enum editorKey{
+    ARROW_LEFT = 'a',
+    ARROW_RIGHT = 'd',
+    ARROW_UP = 'w',
+    ARROW_DOWN = 's'
+}
+
+char editorReadKey(){
+    int nread;
+    char c;
+
+    while((nread = read(STDIN_FILENO, &c, 1)) != 1){
+        if(nread == -1 && errno != EAGAIN){
+            die("read");
+        }
+    }
+
+    if(c == '\x1b'){
+        char seq[3];
+
+        if(read(STDIN_FILENO, &seq[0], 1) != 1){
+            return '\x1b';
+        }
+
+        if(read(STDIN_FILENO, &seq[1], 1) != 1){
+            return '\x1b'
+        }
+
+        if(seq[0] == '['){
+            switch(seq[1]){
+                case 'A': return ARROW_UP;
+                case 'B': return ARROW_DOWN;
+                case 'C': return ARROW_RIGHT;
+                case 'D': return ARROW_LEFT;
+            }
+        }
+    }else{
+        return c;
+    }
+}
+
+
+void editorMoveCursor(char key){
+    switch(key){
+        case ARROW_LEFT:
+            E.cx--;
+            break;
+        case ARROW_RIGHT:
+            E.cx++;
+            break;
+        case ARROW_UP:
+            E.cy--;
+            break;
+        case ARROW_DOWN:
+            E.cy++;
+            break;
+    }
+}
+
+void editorProcessKeypress(){
+    char c = editorReadKey();
+
+    switch(c){
+        case CTRL_KEY('q'):
+            write(STDOUT_FILENO, "\x1b[2J", 4);
+            write(STDOUT_FILENO, "\x1b[H", 3);
+            exit(0);
+            break;
+
+        case ARROW_UP:
+        case ARROW_DOWN:
+        case ARROW_LEFT:
+        case ARROW_RIGHT:
+            editorMoveCursor(c);
+            break;
+    }
+}
+```
+
+Now we just have to choose a representation for arrow keys that does not
+conflicts with `WASD`, in the `editorKey` enum. We will give them a large
+integer value that is out of range of a char, so that they do not conflict with
+any other keypresses. We will also have to change all variables that store
+keypresses to be of type `int` instead of `char`.
+
+```c
+enum editorKey{
+    ARROW_LEFT = 1000,
+    ARROW_RIGHT,
+    ARROW_UP,
+    ARROW_DOWN
+}
+
+int editorReadKey();
+void editorMoveCursor(int);
+
+void editorProcessKeypress(){
+    int c = editorReadKey();
+    ///
+}
+```
+By setting the first constant in the enum to be `1000`, the rest of the
+constants get incrementing values of `1001`, `1002`, `1003`, and so on.
+
+This concludes the arrow key handling code. At this point, if we try pressing
+`<esc>` key, the `[` key, and `Shift+C` in sequence really fast, we may see the
+keypresses being interpreted as the arrow key being pressed. However, this is
+only possible if the sequence is entered really fast, unless the `VTIME` value
+in `enableRawMode()` is adjusted. 
+- Pressing `Ctrl-[` is the same as pressing the `<esc>` key.
+- Pressing `Ctrl-M` is the same as pressing `Enter/Return`.
+- `Ctrl`-key clears the 6th and 7th bits of the character we type in combination
+  with it.
 
