@@ -1404,4 +1404,40 @@ void editorProcessKeypress(){
 If we are on laptop with `Fn` key, we can press `Fn + Left Arrow` and `Fn +
 Right Arrow` to simulate pressing `Home` and `End` keys.
 
+# `Delete` key
 
+`Delete` key simply sends the escape sequence `<esc>[3~` which is now pretty
+trivial to implement.
+
+```c
+enum editorKey {
+    ARROW_LEFT = 1000,
+    ARROW_RIGHT,
+    ARROW_UP,
+    DEL_KEY,
+    HOME_KEY,
+    END_KEY,
+    PAGE_UP,
+    PAGE_DOWN
+}
+
+int editorReadKey(){
+    //
+    //
+    //
+    if(seq[2] == '~'){
+        switch(seq[1]){
+            case '1': return HOME_KEY;
+            case '3': return DEL_KEY;
+            case '4': return END_KEY;
+            case '5': return PAGE_UP;
+            case '6': return PAGE_DOWN;
+            case '7': return HOME_KEY;
+            case '8': return END_KEY;
+        }
+    }
+}
+```
+
+`Delete` keypress can also be achieved by pressing `Fn + Backspace`
+simultaneously.
