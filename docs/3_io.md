@@ -1274,3 +1274,134 @@ keys enough times to move to the top or bottom of the screen. Implementation of
 implement scrolling function. If we are on a machine with `Fn` key, we may be
 able to press `Fn + Arrow Up` and `Fn + Arrow Down` to simulate pressing the
 `Page Up` and `Page Down` keys.
+
+# `Home` and `End` keys.
+
+Like previous keys, these keys also send escape sequences. Unlike the previous
+keys, there are many different escape sequence that could be sent by these keys,
+depending on the operating system, or the terminal emulator.
+
+The `Home` key could be sent as `<esc>[1~`, `<esc>[7~`, `<esc>[H`, or
+`<esc>[OH`. Similarly, the `End` key could be sent as `<esc>[4~`, `<esc>[8~`,
+`<esc>[F`, or `<esc>[OF`.
+
+```c
+enum editorKey{
+    ARROW_LEFT = 1000,
+    ARROW_RIGHT,
+    ARROW_UP,
+    ARROW_DOWN,
+    HOME_KEY,
+    END_KEY,
+    PAGE_UP,
+    PAGE_DOWN
+}
+
+int editorReadKey(){
+    
+    int nread;
+    char c;
+    while((nread = read()STDIN_FILENO, &c, 1) != 1){
+        if(nread == -1 && errno != EAGAIN){
+            die("read");
+        }
+    }
+
+    if(c == '\x1b'){
+        
+        char seq[3];
+
+        if(read(STDIN_FILENO, &seq[0], 1) != 1){
+            return '\x1b';
+        }
+
+        if(read(STDIN_FILENO, &seq[1], 1) != 1){
+            return '\x1b';
+        }
+
+        if(seq[0] == '['){
+            if(seq[1] >= '0' && seq[1] <= '9'){
+                
+                if(read(STDIN_FILENO. &seq[2], 1) != 1){
+                    return '\x1b';
+                }
+
+                if(seq[2] == '~'){
+                    switch(seq[1]){
+                        case '1': return HOME_KEY;
+                        case '4': return END_KEY;
+                        case '5': return PAGE_UP;
+                        case '6': return PAGE_DOWN;
+                        case '7': return HOME_KEY;
+                        case '8': return END_KEY;
+                    }
+                }
+            }else{
+                switch(seq[1]){
+                    case 'A': return ARROW_UP;
+                    case 'B': return ARROW_DOWN;
+                    case 'C': return ARROW_RIGHT;
+                    case 'D': return ARROW_LEFT;
+                    case 'H': return HOME_KEY;
+                    case 'F': return END_KEY;
+                }
+            }
+        }else if(seq[0] == 'O'){
+            switch(seq[1]){
+                case 'H': return HOME_KEY;
+                case 'F': return END_KEY;
+            }
+        }
+
+        return '\x1b';
+    }else{
+        return c;
+    }
+}
+```
+
+We will make `Home` and `End` to move the cursor to the left and right edges of
+the screen.
+
+```c
+void editorProcessKeypress(){
+    int c = editorReadKey();
+
+    switch(c):
+        case CTRL_KEY('q'):
+            write(STDOUT_FILENO, "\x1b[2J", 4);
+            write(STDOUT_FILENO, "\x1b[H", 3);
+            exit(0);
+            break;
+
+        case HOME_KEY:
+            E.cx = 0;
+            break;
+
+        case END_KEY:
+            E.cx = E.screencols - 1;
+            break;
+
+        case PAGE_UP:
+        case PAGE_DOWN:
+            {
+                int times = E.screenrows;
+                while(times--){
+                    editorMoveCursor(c == PAGE_UP ? ARROW_UP: ARROW_DOWN);
+                }
+            }
+            break;
+
+        case ARROW_UP:
+        case ARROW_DOWN:
+        case ARROW_LEFT:
+        case ARROW_RIGHT:
+            editorMoveCursor(c);
+            break;
+}
+```
+
+If we are on laptop with `Fn` key, we can press `Fn + Left Arrow` and `Fn +
+Right Arrow` to simulate pressing `Home` and `End` keys.
+
+
