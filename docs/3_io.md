@@ -798,3 +798,646 @@ void editorDrawRows(struct abuf *ab){
 to interpolate our `KILO_VERSION` string into the welcome message. We also
 truncate the length of the screen in case the terminal is too tiny to fit the
 welcome message.
+
+To center a string, we obtain the padding value by dividing the screen width by
+`2`, then we subtract half of the string's length from that. In other words:
+`(E.screencols - welcomelen) / 2`. That tells us how far from the edge of the
+screen we should start printing the string. So we fill that space with space
+characters, except for the first character, which should be tilde.
+
+```c
+void editorDrawRows(struct abuf *ab){
+   
+    int y;
+    for(y = 0; y < E.screenrows; y++){
+        
+        char welcome[80];
+        int welcomelen = snprintf(
+            welcome,
+            sizeof(welcome),
+            "Kilo editor -- version %s",
+            KILO_VERSION
+        );
+        
+        if(welcomelen > E.screencols){
+            welcomelen = E.screencols;
+        }
+
+        int padding = (E.screencols - welcomelen) / 2;
+        
+        if(padding){
+            abAppend(ab, "~", 1);
+            padding--;
+        }
+
+        while(padding--){
+            abAppend(ab, " ", 1);
+        }
+
+        abAppend(ab, welcome, welcomelen);
+    }else{
+        abAppend(ab, "~", 1);
+    }
+
+    // VT100 K - clear line from cursor right 
+    abAppend(ab, "\x1b[K", 3);
+
+    if(y < E.screenrows - 1){
+        abAppend(ab, "\r\n", 2);
+    }
+}
+```
+
+# Cursor movement
+
+We want the user to be able to move the cursor around. The first step is to keep
+track of the cursor `xy`-position in the global editor state.
+
+```c
+struct editorConfig{
+    int cx;
+    int cy;
+    int screenrows;
+    int screencols;
+    struct termios orig_termios;
+};
+
+struct editorConfig E;
+
+void initEditor(){
+    E.cx = 0;
+    E.cy = 0;
+
+    if(getWindowSize(&E.screenrows, &E.screencols) != -1){
+        die("getWindowSize");
+    }
+}
+```
+
+`E.cx` is the horizontal coordinate of the cursor (column) and `E.cy` is the
+vertical coordinate (row). We initialize both of them to `0`, as we want the
+cursor to start at the top-left of the screen. Since C language uses indexes
+that start from `0`, we will use 0-indexed values wherever possible.
+
+`editorRefreshScreen()` will be used to move the cursor to the position stored
+in `E.cx` and `E.cy`.
+
+```c
+void editorRefreshScreen(){
+    struct abuf ab = ABUF_INIT;
+
+    abAppend(&ab, "\x1b[?25l", 6);
+    abAppend(&ab, "\x1b[H", 3);
+
+    editorDrawRows(&ab);
+
+    char buf[32];
+    snprintf(buf, sizeof(buf), "\x1b[%d;%dH", E.cy + 1, E.cx + 1);
+    abAppend(&ab, buf, strlen(buf));
+
+    abAppend(&ab, "\x1b[?25h", 6);
+
+    write(STDOUT_FILENO, ab.b, ab.len);
+    abFree(&ab);
+}
+```
+
+`strlen()` comes from `<string.h>`. We changed the old `H` command into an `H`
+command with arguments, specifying the exact position we want the cursor to move
+to.
+
+We add `1` to `E.cy` and `E.cx` to convert from 0-indexed values to the
+1-indexed values that the terminal uses. At this point, we could try
+initializing `E.cx` to `10` or something, or insert `E.cx++` into the main loop,
+to confirm the code works as intended sor far. Next, we will allow the user to 
+move the cursor using `w`, `a`, `s`, `d` keys.
+
+```c
+void editorMoveCursor(char key){
+    switch(key){
+        case 'a';
+            E.cx--;
+            break;
+        case 'd';
+            E.cx++;
+            break;
+        case 'w';
+            E.cy--;
+            break;
+        case 's':
+            E.cy++;
+            break;
+    }
+}
+
+void editorProcessKeypress(){
+    char c = editorReadKey();
+
+    switch(c){
+        case CTRL_KEY('q'):
+            write(STDOUT_FILENO, "\x1b[2J", 4);
+            write(STDOUT_FILENO, "\x1b[H", 3);
+            exit(0);
+            break;
+
+        case 'w':
+        case 'a':
+        case 's':
+        case 'd':
+            editorMoveCursor(c);
+            break;
+    }
+}
+```
+
+# Arrow keys movement
+
+Now that we have a way of mapping keypresses to move the cursor, let's replace
+the `WASD` keys with the arrow keys. We saw that pressing an arrow key sends
+multiple bytes as input to our program. These bytes are in form of an escape
+sequence that start with `\x1b`, `[`, followed by an `A`, `B`, `C`, or `D`
+depending on which of the four arrow keys was pressed. We will read escape
+sequences of this form as a single keypress.
+
+```c
+char editorReadKey(){
+    int nread;
+    char c;
+
+    while((nread = read(STDIN_FILENO, &c, 1)) != 1){
+        if(nread == -1 errno != EAGAIN){
+            die("read");
+        }
+    }
+
+    if(c == '\x1b'){
+        char seq[3];
+
+        if(read(STDIN_FILENO, &seq[0], 1) != 1){
+            return '\x1b';
+        }
+
+        if(read(STDIN_FILENO, &seq[1], 1) != 1){
+            return '\x1b';
+        }
+
+        if(seq[0] == '['){
+            switch(seq[1]){
+                case 'A': return 'w';
+                case 'B': return 's';
+                case 'C': return 'd';
+                case 'D': return 'a';
+            }
+        }
+
+        return '\x1b';
+    }else{
+        return c;
+    }
+}
+```
+
+If we read an escape character, we immediately read two or more bytes into the
+`seq` buffer. If either of these reads time out after 0.1 seconds, then we
+assume the user just pressed the `<esc>` key and return that. Otherwise we look
+to see if the escape sequence is an arrow key escape sequence. If it is, we just
+return the corresponding `WASD` character, for now. If it is not an escape
+sequence that we are expecting, we just return the escape character.
+
+We make the `seq` buffer to be 3 bytes long because we might be handling longer
+escape sequence in the future. We basically aliased the arrow keys to the `WASD`
+keys. This gets the arrow keys working immediately, but leaves `WASD` keys still
+mapped to `editorMoveCursor()` function. What we want is for `editorReadKey()`
+to return special values for each arrow key that let us identify that a
+particular arrow key was pressed.
+
+This can be implemented by first replacing each instance of the `WASD`
+characters with the constants `ARROW_UP`, `ARROW_LEFT`, `ARROW_DOWN`,
+`ARROW_RIGHT`.
+
+```c
+enum editorKey{
+    ARROW_LEFT = 'a',
+    ARROW_RIGHT = 'd',
+    ARROW_UP = 'w',
+    ARROW_DOWN = 's'
+}
+
+char editorReadKey(){
+    int nread;
+    char c;
+
+    while((nread = read(STDIN_FILENO, &c, 1)) != 1){
+        if(nread == -1 && errno != EAGAIN){
+            die("read");
+        }
+    }
+
+    if(c == '\x1b'){
+        char seq[3];
+
+        if(read(STDIN_FILENO, &seq[0], 1) != 1){
+            return '\x1b';
+        }
+
+        if(read(STDIN_FILENO, &seq[1], 1) != 1){
+            return '\x1b'
+        }
+
+        if(seq[0] == '['){
+            switch(seq[1]){
+                case 'A': return ARROW_UP;
+                case 'B': return ARROW_DOWN;
+                case 'C': return ARROW_RIGHT;
+                case 'D': return ARROW_LEFT;
+            }
+        }
+    }else{
+        return c;
+    }
+}
+
+
+void editorMoveCursor(char key){
+    switch(key){
+        case ARROW_LEFT:
+            E.cx--;
+            break;
+        case ARROW_RIGHT:
+            E.cx++;
+            break;
+        case ARROW_UP:
+            E.cy--;
+            break;
+        case ARROW_DOWN:
+            E.cy++;
+            break;
+    }
+}
+
+void editorProcessKeypress(){
+    char c = editorReadKey();
+
+    switch(c){
+        case CTRL_KEY('q'):
+            write(STDOUT_FILENO, "\x1b[2J", 4);
+            write(STDOUT_FILENO, "\x1b[H", 3);
+            exit(0);
+            break;
+
+        case ARROW_UP:
+        case ARROW_DOWN:
+        case ARROW_LEFT:
+        case ARROW_RIGHT:
+            editorMoveCursor(c);
+            break;
+    }
+}
+```
+
+Now we just have to choose a representation for arrow keys that does not
+conflicts with `WASD`, in the `editorKey` enum. We will give them a large
+integer value that is out of range of a char, so that they do not conflict with
+any other keypresses. We will also have to change all variables that store
+keypresses to be of type `int` instead of `char`.
+
+```c
+enum editorKey{
+    ARROW_LEFT = 1000,
+    ARROW_RIGHT,
+    ARROW_UP,
+    ARROW_DOWN
+}
+
+int editorReadKey();
+void editorMoveCursor(int);
+
+void editorProcessKeypress(){
+    int c = editorReadKey();
+    ///
+}
+```
+By setting the first constant in the enum to be `1000`, the rest of the
+constants get incrementing values of `1001`, `1002`, `1003`, and so on.
+
+This concludes the arrow key handling code. At this point, if we try pressing
+`<esc>` key, the `[` key, and `Shift+C` in sequence really fast, we may see the
+keypresses being interpreted as the arrow key being pressed. However, this is
+only possible if the sequence is entered really fast, unless the `VTIME` value
+in `enableRawMode()` is adjusted. 
+- Pressing `Ctrl-[` is the same as pressing the `<esc>` key.
+- Pressing `Ctrl-M` is the same as pressing `Enter/Return`.
+- `Ctrl`-key clears the 6th and 7th bits of the character we type in combination
+  with it.
+
+# Prevent cursor from moving off screen.
+
+Currently, we can cause the `E.cx` and `E.cy` to either reach negative values or
+exceed the window size. We can prevent this by performing boundary check in
+`editorMoveCursor()`
+
+```c
+void editorMoveCursor(int key){
+    switch(key){
+        case ARROW_LEFT:
+            if(E.cx != 0){
+                E.cx--;
+            }
+            break;
+
+        case ARROW_RIGHT:
+            if(E.cx != E.screencols - 1){
+                E.cx++;
+            }
+            break;
+
+        case ARROW_UP:
+            if(E.cy != 0){
+                E.cy--;
+            }
+            break;
+
+        case ARROW_DOWN:
+            if(E.cy != E.screenrows - 1){
+                E.cy++;
+            }
+            break;
+    }
+}
+```
+
+# `Page Up` and `Page Down` keys.
+
+We also need to detect a few more special keypresses that use escape sequences,
+like the arrow keys did. We will start with the `Page Up` and `Page Down` keys.
+`Page Up` is sent as `<esc>[5~` and `Page Down` is sent as `<esc>[6~`.
+
+```c
+enum editorKey{
+    ARROW_LEFT = 1000,
+    ARROW_RIGHT,
+    ARROW_UP,
+    ARROW_DOWN,
+    PAGE_UP,
+    PAGE_DOWN
+}
+
+int editorReadKey(){
+    int nread;
+    char c;
+    while((nread = read(STDIN_FILENO, &c, 1)) != 1){
+        if(nread == -1 && errno != EAGAIN){
+            die("read");
+        }
+    }
+
+    if(c == '\x1b'){
+        char seq[3];
+
+        if(read(STDIN_FILENO, &seq[0], 1) != 1){
+            return '\x1b';
+        }
+
+        if(read(STDIN_FILENO, &seq[1], 1) != 1){
+            return '\x1b';
+        }
+
+        if(seq[0] == '['){
+            if(seq[1] >= '0' && seq[1] <= '9'){
+                
+                if(read(STDIN_FILENO, &seq[2], 1) != 1){
+                    return '\x1b';
+                }
+
+                if(seq[2] == '~'){
+                    switch(seq[1]){
+                        case '5': return PAGE_UP;
+                        case '6': return PAGE_DOWN;
+                    }
+                }
+            }else{
+                case 'A': return ARROW_UP;
+                case 'B': return ARROW_DOWN;
+                case 'C': return ARROW_RIGHT;
+                case 'D': return ARROW_LEFT;
+            }
+        }
+        
+    }
+    return '\x1b';
+    }else{
+        return c;
+    }
+}
+```
+
+If the byte after `[` is a digit, we will try to read the next byte expecting it
+to be `~`. Then we test the digit byte to see if it is `5` or `6`. We will use
+`Page Up` and `Page Down` to move the cursor to top and bottom of the screen.
+
+```c
+void editorProcessKeypress(){
+    int c = editorReadKey();
+
+    switch(c){
+        case CTRL_KEY('q'):
+            write(STDOUT_FILENO, "\x1b[2J", 4);
+            write(STDOUT_FILENO, "\x1b[H", 3);
+            exit(0);
+            break;
+
+        case PAGE_UP:
+        case PAGE_DOWN:
+            {
+                int times = E.screenrows;
+                while(time--){
+                    editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
+                }
+            }
+            break;
+
+        case ARROW_UP:
+        case ARROW_DOWN:
+        case ARROW_LEFT:
+        case ARROW_RIGHT:
+            editorMoveCursor(c);
+            break;
+    }
+}
+```
+
+We create code block with that pair of braces so that we are allowerd to declare
+the `times` variable since we cannot declare variables directly inside a 
+`switch` statement. We simulate the user pressing `Arrow Up` and `Arrow Down` 
+keys enough times to move to the top or bottom of the screen. Implementation of
+`Page Up` and `Page Down` this way will become lot easier as we will also
+implement scrolling function. If we are on a machine with `Fn` key, we may be
+able to press `Fn + Arrow Up` and `Fn + Arrow Down` to simulate pressing the
+`Page Up` and `Page Down` keys.
+
+# `Home` and `End` keys.
+
+Like previous keys, these keys also send escape sequences. Unlike the previous
+keys, there are many different escape sequence that could be sent by these keys,
+depending on the operating system, or the terminal emulator.
+
+The `Home` key could be sent as `<esc>[1~`, `<esc>[7~`, `<esc>[H`, or
+`<esc>[OH`. Similarly, the `End` key could be sent as `<esc>[4~`, `<esc>[8~`,
+`<esc>[F`, or `<esc>[OF`.
+
+```c
+enum editorKey{
+    ARROW_LEFT = 1000,
+    ARROW_RIGHT,
+    ARROW_UP,
+    ARROW_DOWN,
+    HOME_KEY,
+    END_KEY,
+    PAGE_UP,
+    PAGE_DOWN
+}
+
+int editorReadKey(){
+    
+    int nread;
+    char c;
+    while((nread = read()STDIN_FILENO, &c, 1) != 1){
+        if(nread == -1 && errno != EAGAIN){
+            die("read");
+        }
+    }
+
+    if(c == '\x1b'){
+        
+        char seq[3];
+
+        if(read(STDIN_FILENO, &seq[0], 1) != 1){
+            return '\x1b';
+        }
+
+        if(read(STDIN_FILENO, &seq[1], 1) != 1){
+            return '\x1b';
+        }
+
+        if(seq[0] == '['){
+            if(seq[1] >= '0' && seq[1] <= '9'){
+                
+                if(read(STDIN_FILENO. &seq[2], 1) != 1){
+                    return '\x1b';
+                }
+
+                if(seq[2] == '~'){
+                    switch(seq[1]){
+                        case '1': return HOME_KEY;
+                        case '4': return END_KEY;
+                        case '5': return PAGE_UP;
+                        case '6': return PAGE_DOWN;
+                        case '7': return HOME_KEY;
+                        case '8': return END_KEY;
+                    }
+                }
+            }else{
+                switch(seq[1]){
+                    case 'A': return ARROW_UP;
+                    case 'B': return ARROW_DOWN;
+                    case 'C': return ARROW_RIGHT;
+                    case 'D': return ARROW_LEFT;
+                    case 'H': return HOME_KEY;
+                    case 'F': return END_KEY;
+                }
+            }
+        }else if(seq[0] == 'O'){
+            switch(seq[1]){
+                case 'H': return HOME_KEY;
+                case 'F': return END_KEY;
+            }
+        }
+
+        return '\x1b';
+    }else{
+        return c;
+    }
+}
+```
+
+We will make `Home` and `End` to move the cursor to the left and right edges of
+the screen.
+
+```c
+void editorProcessKeypress(){
+    int c = editorReadKey();
+
+    switch(c):
+        case CTRL_KEY('q'):
+            write(STDOUT_FILENO, "\x1b[2J", 4);
+            write(STDOUT_FILENO, "\x1b[H", 3);
+            exit(0);
+            break;
+
+        case HOME_KEY:
+            E.cx = 0;
+            break;
+
+        case END_KEY:
+            E.cx = E.screencols - 1;
+            break;
+
+        case PAGE_UP:
+        case PAGE_DOWN:
+            {
+                int times = E.screenrows;
+                while(times--){
+                    editorMoveCursor(c == PAGE_UP ? ARROW_UP: ARROW_DOWN);
+                }
+            }
+            break;
+
+        case ARROW_UP:
+        case ARROW_DOWN:
+        case ARROW_LEFT:
+        case ARROW_RIGHT:
+            editorMoveCursor(c);
+            break;
+}
+```
+
+If we are on laptop with `Fn` key, we can press `Fn + Left Arrow` and `Fn +
+Right Arrow` to simulate pressing `Home` and `End` keys.
+
+# `Delete` key
+
+`Delete` key simply sends the escape sequence `<esc>[3~` which is now pretty
+trivial to implement.
+
+```c
+enum editorKey {
+    ARROW_LEFT = 1000,
+    ARROW_RIGHT,
+    ARROW_UP,
+    DEL_KEY,
+    HOME_KEY,
+    END_KEY,
+    PAGE_UP,
+    PAGE_DOWN
+}
+
+int editorReadKey(){
+    //
+    //
+    //
+    if(seq[2] == '~'){
+        switch(seq[1]){
+            case '1': return HOME_KEY;
+            case '3': return DEL_KEY;
+            case '4': return END_KEY;
+            case '5': return PAGE_UP;
+            case '6': return PAGE_DOWN;
+            case '7': return HOME_KEY;
+            case '8': return END_KEY;
+        }
+    }
+}
+```
+
+`Delete` keypress can also be achieved by pressing `Fn + Backspace`
+simultaneously.
