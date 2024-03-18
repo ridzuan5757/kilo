@@ -191,3 +191,27 @@ passed a filename as a command line argument. If they did, we call
 `editorOpen()` and pass it the filename. If they ran `./kilo` without any
 arguments, `editorOpen()` will not be called and they will start with a blank
 file.
+
+`getLine()` is useful for reading lines from a file when we do not know how much
+memory to allocate for each line. It takes care of memory management for us.
+First, we pass it to a null pointer `line` and `linecap` (line capacity) of `0`. 
+That makes it allocate new memory for the next line it reads, and:
+- set `line` to point to the memory.
+- set `linecap` to let us know how much memory it allocated.
+
+It's return value is the length of the line it read, or `-1` if it's at the end
+of the file and there are no more lines to read. Later, when we have
+`editorOpen()` read multiple lines of a file, we will be able to feed the new
+`line` and `linecap` values back into `getline()` over and over, and it will try
+and resue the memory that `line` points to as long as the `linecap` is big
+enough to fit the next line it reads. For now, we just copy the one line it
+reads into `E.rows.chars`, and then `free()` the `line` that `getline()`
+allocated.
+
+We also strip off the newline or carriage return at the end of the line before
+copying it into our `erow`. We know each `erow` represent one line of text, so
+there is no use of storing a newline characters at the end of each one.
+
+If the compiler complains about `getLine()`, we may need to define feature test
+macro. Even if it compiles fine on our machine without them, lets just implement
+this macro to make the code more portable.
