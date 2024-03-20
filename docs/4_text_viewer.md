@@ -70,7 +70,7 @@ int main(){
 }
 ```
 
-`mallow()` comes from `<stdlib.h>`. `ssize_t` comes from `<sys/types.h>`.
+`malloc()` comes from `<stdlib.h>`. `ssize_t` comes from `<sys/types.h>`.
 `editorOpen()` will eventually be for opening and reading file from disk. To
 load our "Hello, world!" message into the editor's `erow` `struct`, we set the
 `size` field to the length of our message, allocate the necessary memory using
@@ -215,3 +215,72 @@ there is no use of storing a newline characters at the end of each one.
 If the compiler complains about `getLine()`, we may need to define feature test
 macro. Even if it compiles fine on our machine without them, lets just implement
 this macro to make the code more portable.
+
+```c
+#define _DEFAULT_SOURCE
+#define _BSD_SOURCE
+#define _GNU_SOURCE
+
+#include <stdio.h>
+...
+```
+
+We add them above our includes, because the header files we are including use
+the macros to decide what features to expose.
+
+Now let's fix a quick bug. We want the welcome message to only display when the
+user starts the program with no arguments, and not when they open a file, as the
+welcome message could get in the way of displaying the file.
+
+```c
+void editorDrawRows(struct abuf *ab){
+    int y;
+
+    for(y = 0; y < E.screenrows; y++){
+
+        if(y > E.numrows){
+            
+            if (E.numrows == 0 && y == E.screenwos / 3){
+
+                char welcome[80];
+                int welcomelen = snprintf(
+                    welcome,
+                    sizeof(welcome),
+                    "Kilo editor -- version %s",
+                    KILO_VERSION
+                );
+
+                if(welcomelen > E,screencols){
+                    welcomelen = E.screencols;     
+                }
+
+                int padding = (E.screencols - welcomelen) / 2;
+                if(padding){
+                    abAppend(ab, "~", 1);
+                    padding--;
+                }
+
+                while(padding--){
+                    abAppend(ab, " ", 1);
+                }
+            }else{
+                int len = E.row.size;
+
+                if(len > E.screencols){
+                    len = E.screencols;
+                }
+
+                abAppend(ab, E.row.chars, len);
+            }
+
+            abAppend(ab, "\x1b[K", 3);
+            
+            if(y < E.screenrows - 1){
+                abAppend(ab, "\r\n", 2);
+            }
+        }
+    }
+}
+```
+
+Now the welcome message only displays if the text buffer is compeltely empty.
