@@ -7,6 +7,10 @@
 #include <termios.h>
 #include <unistd.h>
 
+#define _DEFAULT_SOURCE
+#define _BSD_SOURCE
+#define _GNU_SOURCE
+
 #define KILO_VERSION "0.0.1"
 #define CTRL_KEY(k) (k & 0x1f)
 
@@ -206,6 +210,7 @@ int getWindowSize(int *rows, int *cols) {
 }
 
 void editorOpen(char *filename) {
+
   FILE *fp = fopen(filename, "r");
   if (!fp) {
     die("fopen");
@@ -258,7 +263,7 @@ void editorDrawRows(struct abuf *ab) {
 
   for (y = 0; y < E.screenrows; y++) {
     if (y >= E.numrows) {
-      if (y == E.screenrows / 3) {
+      if (E.numrows == 0 && y == E.screenrows / 3) {
         char welcome[80];
         int welcomelen = snprintf(welcome, sizeof(welcome),
                                   "Kilo editor -- version %s", KILO_VERSION);
