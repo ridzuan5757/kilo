@@ -24,7 +24,7 @@ enum editorKey {
 
 typedef struct erow {
   int size;
-  char *chars
+  char *chars;
 } erow;
 
 struct editorConfig {
@@ -205,6 +205,17 @@ int getWindowSize(int *rows, int *cols) {
   return 0;
 }
 
+void editorOpen(void) {
+  char *line = "Hello World!";
+  ssize_t linelen = 13;
+
+  E.row.size = linelen;
+  E.row.chars = malloc(linelen + 1);
+  memcpy(E.row.chars, line, linelen);
+  E.row.chars[linelen] = '\0';
+  E.numrows = 1;
+}
+
 struct abuf {
   char *b;
   int len;
@@ -230,28 +241,36 @@ void editorDrawRows(struct abuf *ab) {
   int y;
 
   for (y = 0; y < E.screenrows; y++) {
+    if (y >= E.numrows) {
+      if (y == E.screenrows / 3) {
+        char welcome[80];
+        int welcomelen = snprintf(welcome, sizeof(welcome),
+                                  "Kilo editor -- version %s", KILO_VERSION);
 
-    if (y == E.screenrows / 3) {
-      char welcome[80];
-      int welcomelen = snprintf(welcome, sizeof(welcome),
-                                "Kilo editor -- version %s", KILO_VERSION);
+        if (welcomelen > E.screencols) {
+          welcomelen = E.screencols;
+        }
 
-      if (welcomelen > E.screencols) {
-        welcomelen = E.screencols;
-      }
+        int padding = (E.screencols - welcomelen) / 2;
+        if (padding) {
+          abAppend(ab, "~", 1);
+          padding--;
+        }
+        while (padding--) {
+          abAppend(ab, " ", 1);
+        }
 
-      int padding = (E.screencols - welcomelen) / 2;
-      if (padding) {
+        abAppend(ab, welcome, welcomelen);
+      } else {
         abAppend(ab, "~", 1);
-        padding--;
       }
-      while (padding--) {
-        abAppend(ab, " ", 1);
-      }
-
-      abAppend(ab, welcome, welcomelen);
     } else {
-      abAppend(ab, "~", 1);
+      int len = E.row.size;
+
+      if (len > E.screencols) {
+        len = E.screencols;
+      }
+      abAppend(ab, E.row.chars, len);
     }
 
     // VT100 K - erase in line
@@ -348,6 +367,7 @@ void editorProcessKeypress(void) {
 void initEditor(void) {
   E.cx = 0;
   E.cy = 0;
+  E.numrows = 0;
 
   if (getWindowSize(&E.screenrows, &E.screencols) == -1) {
     die("getWindowSize");
@@ -357,6 +377,7 @@ void initEditor(void) {
 int main(void) {
   enableRawMode();
   initEditor();
+  editorOpen();
 
   while (1) {
     editorRefreshScreen();
