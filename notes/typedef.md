@@ -163,4 +163,106 @@ Now we can use a `typedef` to create a named function pointer type called
 typedef void(*printer_t)(int);
 ```
 
+This creates a type, named `printer_t` for a pointer to a function that takes
+single `int` argument and returns nothing, which matches the signature of the
+functions `print_to_n` and `print_n`. To use it, we create a cariable of the
+created type and ssign it a pointer to one of the functions in question:
 
+```c
+printer_t p = &print_to_n;
+
+// this would be required without the type
+void (*p)(int) = &print_to_n;
+```
+
+This the `typedef` allows a simpler syntax when dealing with function pointers.
+This becomes more apparent when function pointers are used in more complex
+situations, such as arguments to functions. 
+
+If we are using a function that takes a function pointer as a parameter without
+a function pointer type defined, the function definition would be:
+
+```c
+void foo(void (*printer)(int), int y){
+    // code
+    printer(y);
+    // code
+}
+```
+
+Likewie functions can return function pointers and again, the use of a `typedef`
+can make the syntax simpler when doing so. A classic example is the `signal`
+function from `<signal.h>`. The declaration for it is:
+
+```c
+void (*signal(int sig, void (*func)(int)))(int);
+```
+
+That is a function that takes two arguments:
+- An `int`
+- A pointer to a function that takes `int` as argument and returns `void`.
+
+And this function returns a pointer to function like its second argument.
+
+If we defined a type `SigCatcher` as an alias for the pointer to the function
+time:
+
+```c
+typedef void (*SigCatcher)(int);
+```
+
+Then we could declare `signal()` using:
+
+```c
+SigCatcher signal(int sig, SigCatcher func);
+```
+
+On the whole, this is easier to uncerstand, even though the C standard did not
+elect to define a type to do the job. The `signal` function takes two arguments,
+and `int` and `SigCatcher`, and returns a `SigCatcher` is a pointer to a
+function that taks an int argument and returns nothing.
+
+Although using `typedef` names for pointer to function types makes life easier,
+it can also lead to confusion for others who will maintain our code later on.
+Make sure to use it with caution and proper documentation.
+
+## Disadvantages of Typedef
+
+`typedef` could lead to the namespace pollution in large C program.
+
+## Disadvantages of Typedef Structs
+
+`typedef`'d structs without a tag name a major caouse of needles imposition of
+ordering relationship among header files. Consider:
+
+```c
+#ifndef FOO_H
+#define FOO_H 1
+
+#define FOO_DEF (0xDEADBABE)
+
+// forward declaration, declared in bar.h
+struct bar;
+
+struct foo{
+    struct bar* bar;
+}
+
+#endif
+```
+
+With such a definition, not using `typedefs`, it is possible for a compilation
+unit to include `foo.h` to get at the `FOO_DEF` definition. If it does not
+attempt to dereference the `bar` emmber of the `foo` struct then there will be
+no need to include the `bar.h` file.
+
+## Difference with #define
+`#define` is a C pre-processor directive which also used to define the aliases
+for various data types similar to `typedef` but with the following differences:
+- `typedef` is limited to giving symbolic names to types only.
+- `#define` can be used to define alias for values as well.
+- `typedef` interpretation is performed by the compiler.
+- `#define` statements are processed by pre-processor.
+- Note that `#define cptr char*` followed by `cptr a, b` does not do the same as
+  `typedef char *cptr` followed by `cptr a, b`. With `#define`, `b` is a plain
+  `char` variable, but it is also a pointer with the `typedef`.
