@@ -284,3 +284,64 @@ void editorDrawRows(struct abuf *ab){
 ```
 
 Now the welcome message only displays if the text buffer is compeltely empty.
+
+# Multiple Lines Display
+
+To store multiple lines, let's make `E.row` an array of `erow` structs. It will
+be a dynamically-allocated array, so we will make it a pointer to `erow`, and
+initialize the pointer to `NULL`. This will break bunch of the code that does
+not expect `E.row` to be a pointer, so the program will fail to compile at
+first.
+
+```c
+struct editorConfig{
+    int cx;
+    int cy;
+    int screenrows
+    int screenCols;
+    int numrows;
+    erow *row;
+    struct termios orig_termios
+};
+
+void initEditor(){
+    if(getWindowSize(&E.screenrows. &E.screenCols) == -1){
+    die("getWindowSize");
+    }
+}
+```
+
+In `editorOpen()` we will initializes `E.row` to a new function called
+`editorAppendRow()`.
+
+```c
+void editorAppendRow(char *s, size_t len){
+    E.row.size = len;
+    E.row.chars = malloc(len +1);
+    memcpy(E.row.chars, s, len);
+    E.row.chars[len] = '\0';
+    E.numrows = 1;
+}
+
+void editorOpen(char *filename){
+    FILE *fp = fopen(filename, "r");
+
+    if(!fp){
+        die("fopen");
+    }
+    
+
+    char *line = NULL;
+    size_t linecap = 0;
+    ssize_t linelen;
+    
+    linelen = getline(&line, &linecap, fp);
+    if(linelen != -1){
+        while(linelen > 0 && (line[linelen - 1] == '\n' || line[linelen - 1])){
+            linelen--;
+        }
+
+        editorAppendRow(line, linelen);
+    }
+}
+```
