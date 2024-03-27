@@ -222,7 +222,7 @@ void editorOpen(char *filename) {
   linelen = getline(&line, &linecap, fp);
   if (linelen != -1) {
     while (linelen > 0 &&
-           (line[linelen - 1] != '\n' || line[linelen - 1] != '\r')) {
+           (line[linelen - 1] == '\n' || line[linelen - 1] == '\r')) {
       linelen--;
     }
 
@@ -395,11 +395,11 @@ void initEditor(void) {
   }
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char *argv[]) {
   enableRawMode();
   initEditor();
 
-  if (argc > 2) {
+  if (argc >= 2) {
     editorOpen(argv[1]);
   }
 
