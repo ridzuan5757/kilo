@@ -405,3 +405,92 @@ the number of bytes each `erow` takes for `sizeof(erow)`  and multiply that by
 the number of rows we want. Then we set `at` to the index of the new row we want
 to initialize, and replace each occurence of `E.row` to `E.row[at]`. Lastly, we
 update the value of the number of rows, from `E.numrows = 1` to `E.numrows++`.
+
+We will also update `editorDrawRows()` to use `E.row[y]` instead of `E.row`,
+when printing out the current line.
+
+```c
+void editorDrawRows(struct abuf *ab){
+    int y;
+
+    for(y = 0; y < E.screenrows; y++){
+        if(y >= E.numrows){
+            if(E.numrows == 0 && y == E.screenrows / 3){
+                
+                char welcome[80];
+                int welcomelen = snprintf(
+                    welcome, 
+                    sizeof(welcome),
+                    "Kilo editor -- version %s",
+                    KILO_VERSION
+                );
+
+                if(welcomelen > E.screencols){
+                    welcomelen = E.screencols;
+                }
+
+                int padding = (E.screencols - welcomelen) / 2;
+                if(padding){
+                    abAppend(ab, "~", 1);
+                    padding--;
+                }
+
+                while(padding--){
+                    abAppend(ab, " ", 1);
+                }
+
+                abAppend(ab, welcome, welcomelen);
+            }else{
+                abAppend(ab, "~", 1);
+            }
+        }else{
+            imt len = E.row[y].size;
+            
+            if(len > E.screencols){
+                len = E.screencols;
+            }
+
+            abAppend(ab, E.row[y].chars, len);
+
+        }
+
+        abAppend(ab, "\x1b[K", 3);
+
+        of(y < E.screenrows - 1){
+            abAppend(ab, "\r\n, 2");
+        }
+    }
+}
+```
+
+At this point, the code should compile, but it still only reads a single line
+fromt he file. We will add `while` loop to `editorOpen()` to read entire file
+into `E.row`.
+
+```c
+void editorOpen(char* filename){
+    FILE *fp = fopen(filename, "r");
+    if(!fp){
+        die("fopen");
+    }
+
+    char *line = NULL;
+    size_t linecap = 0;
+    ssize_t linelen;
+
+    while((linelen = getline(&line, &linecap, fp)) != -1){
+        while(linelen > 0 && 
+            (line[linelen - 1] == '\n' || line[linelen - 1] == '\r')){
+            linelen--;
+        }
+
+        editorAppendRow(line, linelen);
+    }
+
+    free(line);
+    fclose(fp);
+}
+```
+
+The `while` loop works because `getline()` returns `-1` when it reaches end of
+the file and there are no more lines to be read.
