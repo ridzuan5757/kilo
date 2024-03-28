@@ -494,3 +494,33 @@ void editorOpen(char* filename){
 
 The `while` loop works because `getline()` returns `-1` when it reaches end of
 the file and there are no more lines to be read.
+
+# Vertical scrolling
+
+Next we want to enable the user to scroll through the whole file, instead of
+just being able to see the top few line of the file. Let's add row offset
+`rowoff` variable to the global editor state, which will kepp track of what row
+of the file the user is currently scrolled to.
+
+```c
+struct editorConfig{
+    int cx;
+    int cy;
+    int rowoff;
+    int screenrows;
+    int screencols;
+    int numrows;
+    erow *row;
+    struct termios orig_termios
+};
+
+void initEditor(){
+    E.cx = 0;
+    E.cy = 0;
+    E.rowoff = 0;
+    E.numrows = 0;
+    E.row = NULL;
+
+    if(getWindowSize(&E.screenrows, ))
+}
+```
