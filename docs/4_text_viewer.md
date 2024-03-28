@@ -521,6 +521,27 @@ void initEditor(){
     E.numrows = 0;
     E.row = NULL;
 
-    if(getWindowSize(&E.screenrows, ))
+    if(getWindowSize(&E.screenrows, &E.screencols) == -1){
+        die("getWindowSize");
+    }
+}
+```
+
+We initialize it to `0`, which means we will be scrolled to the top of the file
+by default. Now let's have `editorDrawRows()` display the currect range of lines
+of the file according to the value of `rowoff`.
+
+```c
+void editorDrawRows(struct abuf *ab){
+    int y;
+
+    for(y = 0; y < E.screenrowsl y++){
+
+        int filerow = y + E.rowoff;
+
+        if(filerow >= E.numrows){
+
+        }
+    }
 }
 ```
