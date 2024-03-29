@@ -540,8 +540,101 @@ void editorDrawRows(struct abuf *ab){
         int filerow = y + E.rowoff;
 
         if(filerow >= E.numrows){
+            if(E.numrows == 0 && y == E.screenrows / 3){
+                char welcome[80];
+                int welcomelen = snprintf(
+                    welcome,
+                    sizeof(welcome),
+                    "Kilo editor -- version %s",
+                    KILO_VERSION
+                );
 
+                if(welcomelen > E.screencols){
+                    welcomelen = E.screencols;
+                }
+
+                int padding = (E.screencols - welcomelen) / 2;
+                if(padding){
+                    abAppend(ab, "~", 1);
+                    padding --;
+                }
+
+                while(padding--){
+                    abAppend(ab, " ", 1);
+                }
+
+                abAppend(ab, welcome, welcomelen);
+            }else{
+                abAppend(ab, "~", 1);
+            }
+        }else{
+            int len = E.row[filerow].size;
+
+            if(len > E.screencols){
+                len = E.screencols;
+            }
+
+            abAppend(ab, E.row[filerow].chars, len);
+        }
+
+        abAppend(ab, "\x1b[K", 3);
+        if(y < E.screenrows - 1){
+            abAppend(ab, "\r\n", 2);
         }
     }
 }
 ```
+
+To get the row of the file that we want to display at each `y` position, we add
+`E.rowoff` to the `y` position. So we define a new variable `filerow` that
+contains that value, and use that as the index into `E.row`.
+
+Now the question is, where do we set the value of `E.rowoff`? Our strategy will
+be to check if the cursor has moved outside of the visible window, and if so, we
+will adjust `E.rowoff` so that the cursor is just inside the visible window. We
+will put this logic in a function called `editorScroll()`, and call it right
+before we refresh the screen.
+
+```c
+void editorScroll(){
+    if(E.cy < E.rowoff){
+        E.rowoff = E.cy;
+    }
+
+    if(E.cy >= E.rowoff + E.screenrows){
+        E.rowoff = E.cy - E.screenrows + 1;
+    }
+}
+
+void editorRefreshScreen(){
+    editorScroll();
+    .
+    .
+    .
+}
+```
+The first `if` statement checks if the cursor is above the visible window, and
+if so, scrolls up to where the cursor is. The second `if` statement checks if
+the cursor is past the bottom of the visible window, and contains slightly more
+complicated arithmetic because `E.rowoff` refres to what is at the top of the
+screen, and we have to get `E.screenrows` involved to talk about what is at the
+bottom of the screen.
+
+Now let's allow the cursor to advance past the bottom of the screen, but not
+past the bottom of the file.
+
+```c
+void editorMoveCursor(int key){
+    switch(key){
+        case ARROW_LEFT:
+            if(E.cx != 0){
+                E.cx--;
+            }
+            break;
+
+        
+    }
+}
+```
+
+
