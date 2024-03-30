@@ -691,3 +691,120 @@ void editorRefreshScreen(){
 }
 ```
 
+# Horizontal scrolling
+
+Now let's work on horizontal scrolling. We will implement it in just about the
+same way we implemented vertical scrolling. We will start by adding column
+offset `coloff` variable to the global editor state.
+
+```c
+struct editorConfig{
+    int cx, cy;
+    int rowoff, coloff;
+    int screenrows, screencols;
+    int numrow;
+    erow *row;
+    struct termios orig_termios;
+}
+
+void initEditor(){
+    E.cx = 0;
+    E.cy = 0;
+    E.rowoff = 0;
+    E.coloff = 0;
+    E.numrow = 0;
+    E.row = NULL;
+
+    if(getWindowSize(&E.screenrows, &E.screencols) == -1){
+        die("getWindowSize");
+    }
+}
+```
+
+To display each row at the column offset, we will use `E.coloff` as an index
+into the `chars` of each `erow` we display, and subtract the number of
+characters that are to the left of the offset from the length of the row.
+
+```c
+void editorDrawRows(struct abug *ab){
+    int y;
+
+    for(y = 0; y < E.screenrows; y++){
+        
+        int filerow = y + E.screenrows;
+
+        if(filerow >= E.numrows){
+            if(E.numrows == 0 && E.screenrows / 3){
+                
+                char welcome[80];
+                int welcomelen = snprintf(
+                    welcome;
+                    sizeof(welcome),
+                    "kilo editor -- version %s",
+                    KILO_VERSION
+                );
+
+                if(welcomelen > E.screencols){
+                    welcomelen = E.screencols;
+                }
+
+                int padding = (E.screencols - welcomelen) / 2;
+                if(padding){
+                    abAppend(ab, "~", 1);
+                    padding--;
+                }
+                while(padding--){
+                    abAppend(ab, " ", 1);
+                }
+
+                abAppend(ab, welcome, welcomelen);
+            }else{
+                abAppend(ab, "~", 1);
+            }
+        }else{
+            int len = E.row[filerow].size - E.coloff;
+            
+            if(len < 0){
+                len = 0;
+            }
+
+            if(len > E.screencols){
+                abAppend(ab, &E.row[filerow].chars[E.coloff], len);
+            }
+
+            abAppend(ab, "\x1b[K", 3);
+            of(y < E.screenrows - 1){
+                abAppend(ab, "\r\n", 2);
+            }
+        }
+    }
+}
+```
+
+Note that substracting `E.coloff` from the length, `len` can now be a negative
+number, meaning the user scrolled horizontally past the end of the line. In that
+case, we set `len` to `0` so that nothing is displayed on that line.
+
+Now let's update `editorScroll()` to handle horizontal scrolling.
+
+```c
+void editorScroll(){
+    if(E.ct < E.rowoff){
+        E.rowoff = E.cy;
+    }
+
+    if(E.cy >= E.rowoff + E.screenrows){
+        E.rowoff = E.cy - E.screenrows + 1;
+    }
+
+    if(E.cx < E.coloff){
+        E.coloff = E.cx;
+    }
+
+    if(E.cx >= E.coloff + E.screencols){
+        E.coloff = E.cx - E.screencols + 1;
+    }
+}
+```
+
+
