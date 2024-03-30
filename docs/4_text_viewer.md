@@ -871,3 +871,57 @@ void editorRefreshScreen(){
     abFree(&ab);
 }
 ```
+
+# Right-side scroll limit.
+
+Now, both `E.cx` and `E.cy` refer to the cursor's position within the file, not
+its position on the screen. So our goal with the next few steps is to limit the
+values of `E.cx` and `E.cy` to only ever point to valid position in the file.
+Otherwise, the user could move the cursor way off to the right of a line and
+start inserting text there, which would not make much sense.
+
+The only exception to this rule are that `E.cx` can point one character past the
+end of a line so that characters can be inserted at the end of the line, and
+`E.cy` can point one line past the end of the file so that new lines at the end
+of the line can be added easily.
+
+Let's start by not allowing the user to scroll past the end of the current line.
+
+```c
+void editorMoveCursor(int key){
+    erow *row = (E.cy >= E.numrows) ? NULL : &E.row[E.cy];
+
+    switch(key){
+        
+        case ARROW_LEFT:
+            if(E.cx != 0){
+                E.cx--;
+            }
+            break;
+
+        case ARROW_RIGHT:
+            if(row && E.cx < row->size){
+                E.cx++;
+            }
+            break;
+
+        case ARROW_UP:
+            if(E.cy != 0){
+                E.cy--;
+            }
+            break;
+
+        case ARROW_DOWN:
+            if(E.cy < E.numrows){
+                E.cy++;
+            }
+            break;
+    }
+}
+```
+
+Since `E.cy` is allowed to be one past the line of the file, we use the ternary
+operator to check if the cursor is on an actual line. If it is, then the `row`
+variable will point to the `erow` that the cursor is on, and we will check
+whether `E.cx` is to the left of the end of that line before we allow the cursor
+to move to the right.
