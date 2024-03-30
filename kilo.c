@@ -268,7 +268,7 @@ void abAppend(struct abuf *ab, const char *s, int len) {
 
 void abFree(struct abuf *ab) { free(ab->b); }
 
-void editorScroll() {
+void editorScroll(void) {
   if (E.cy < E.rowoff) {
     E.rowoff = E.cy;
   }
@@ -362,6 +362,9 @@ void editorRefreshScreen(void) {
 }
 
 void editorMoveCursor(int key) {
+
+  erow *row = (E.cy >= E.numrows) ? NULL : &E.row[E.cy];
+
   switch (key) {
   case ARROW_LEFT:
     if (E.cx != 0) {
@@ -369,7 +372,9 @@ void editorMoveCursor(int key) {
     }
     break;
   case ARROW_RIGHT:
-    E.cx++;
+    if (row && E.cx < row->size) {
+      E.cx++;
+    }
     break;
   case ARROW_UP:
     if (E.cy != 0) {
