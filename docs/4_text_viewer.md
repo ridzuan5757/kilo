@@ -925,3 +925,58 @@ operator to check if the cursor is on an actual line. If it is, then the `row`
 variable will point to the `erow` that the cursor is on, and we will check
 whether `E.cx` is to the left of the end of that line before we allow the cursor
 to move to the right.
+
+# Snap cursor to the end of line.
+
+The user is however still able to move the cursor past the end of a line. They
+can do it by moving the cursor to the end of a long line, then moving it down to
+the next line that happens to be shorter than the current line. The `E.cx` value
+won't change, and the cursor will be off to the right of the end of the line it
+is now on.
+
+Let's add some code to `editorMoveCursor()` that corrects `E.cx` if it ends up
+past the end of the line it is on.
+
+```c
+void editorMoveCursor(int key){
+    erow *row = (E.cy >= E.numrows) ? NULL : &E.row[E.cy];
+
+    switch(key){
+        
+        case ARROW_LEFT:
+            if(E.cx != 0){
+                E.cx--;
+            }
+            break;
+
+        case ARROW_RIGHT:
+            if(row && E.cx < row->size){
+                E.cx++;
+            }
+            break;
+
+        case ARROW_UP:
+            if(E.cy != 0){
+                E.cy--;
+            }
+            break;
+
+        case ARROW_DOWN:
+            if(E.cy < E.numrows){
+                E.cy++;
+            }
+            break;
+    }
+
+    row = (E.cy >= E.numrows) ? NULL : &E.row[E.cy];
+    int rowlen = row ? row->size : 0;
+    if(E.cx > rowlen){
+        E.cx = rowlen;
+    }
+}
+```
+
+We have to set `row` again, since `E.cy` could point to a different line that it
+did before. We then set `E.cx` to the end of that line if `E.cx` is to the right
+of the end of that line. Also note that we consider a `NULL` to be line of
+length `0`, which works for our purposes here.
