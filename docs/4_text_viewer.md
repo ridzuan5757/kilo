@@ -632,9 +632,62 @@ void editorMoveCursor(int key){
             }
             break;
 
-        
+        case ARROW_RIGHT:
+            if(E.cx != E.screencols - 1){
+                E.cx++;
+            }
+            break;
+
+        case ARROW_UP:
+            if(E.cy != 0){
+                E.cy--;
+            }
+            break;
+
+        case ARROW_DOWN:
+            if(E.cy < E.numrows){
+                E.cy++;
+            }
+            break;
     }
 }
 ```
 
+We should be able to scroll through the entire file now when we run `./kilo
+kilo.c`. If the file contains tab characters, we will see that the characters
+that the tabs take up are not being erased properly when drawing to the screen.
+
+If we try to scroll back up, we may notice the cursor is not being positioned
+properly. That is because `E.cy` no longer refers to the position of the curosr
+on the screen. It refers to the position of the cursor within the text file. To
+position the cursor on the screen, we now have to subtract `E.rowoff` from the
+value of `E.cy`.
+
+```c
+void editorRefreshScreen(){
+    editorScroll();
+
+    struct abuf ab = ABUF_INIT;
+
+    abAppend(&ab, "\x1b[?25l", 6);
+    abAppend(&ab, "\x1b[H", 3);
+
+    editorDrawRows(&ab);
+
+    char buf[32];
+    snprintf(
+        buf, 
+        sizeof(buf),
+        "\x1b[%d;%dH",
+        (E.cy - E,rowoff) + 1,
+        E.cx + 1
+    );
+    abAppend(&ab, buf, strlen(buf));
+
+    abAppend(&ab, "\x1b?[25l", 6);
+    
+    write(STDOUT_FILENO, ab.b, ab.len);
+    abFree(&ab);
+}
+```
 
