@@ -807,4 +807,67 @@ void editorScroll(){
 }
 ```
 
+As we can see, it is exactly parallel to the vertical scrolling code. We just
+replace `E.cy` with `E.cx`, `E.rowoff` with `E.coloff`, and `E.screenrows` with
+`E.screencols`. Now let's allow the user to scroll past the right edge of the
+screen.
 
+```c
+void editorMoveCursor(int key){
+    switch(key){
+        
+        case ARROW_LEFT:
+            if(E.cx != 0){
+                E.cx--;
+            }
+            break;
+
+        case ARROW_RIGHT:
+            E.cx++;
+            break;
+
+        case ARROW_UP:
+            if(E.cy != 0){
+                E.cy--;
+            }
+            break;
+
+        case ARROW_DOWN:
+            if(E.cy < E.numrows){
+                E.cy++;
+            }
+            break;
+    }
+}
+```
+
+We should be able to confirm that horizontal scrolling now works. Let's now fix
+the cursor positioning, just like we did for vertical scrolling.
+
+```c
+void editorRefreshScreen(){
+    editorScroll();
+
+    struct abuf ab = ABUF_INIT;
+
+    abAppend(&ab, "\x1b[?25l", 6);
+    abAppend(&ab, "\x1b[H", 3);
+
+    editorDrawRows(&ab);
+
+    char buf[32];
+    snprintf(
+        buf,
+        sizeof(buf),
+        "\x1b[%d;%dH",
+        (E.cy - E.rowoff) + 1,
+        (E.cx - E.coloff) + 1
+    );
+    abAppend(&ab, buf, strlen(buf));
+
+    abAppend(&ab, "\x1b[?25h", 6);
+
+    write(STDOUT_FILENO, ab.b, ab.len);
+    abFree(&ab);
+}
+```
