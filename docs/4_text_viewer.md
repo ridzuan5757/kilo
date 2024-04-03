@@ -1029,3 +1029,26 @@ void editorMoveCursor(int key){
 ```
 
 We make sure they are not on the very first line before we move them up a line.
+
+# Moving right at the end of a lines
+
+Similarly let's allow the user to press right key at the end of a line to go to
+the beginning of the next line.
+
+```c
+void editorMoveCursor(int key){
+    switch(key){
+        case ARROW_RIGHT:
+            if(row && E.cx < row->size){
+                E.cx++;
+            }else if(row && E.cx == row->size){
+                E.cy++;
+                E.cx = 0;
+            }
+            break;
+    }
+}
+```
+
+Here we have to make sure they are not at the end of the file before moving down
+a line.
