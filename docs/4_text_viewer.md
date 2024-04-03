@@ -1052,3 +1052,28 @@ void editorMoveCursor(int key){
 
 Here we have to make sure they are not at the end of the file before moving down
 a line.
+
+# Tabs rendering
+
+If we try opening the `Makefile` using `./kilo Makefile`, we will notice that
+the tab character on the second line of the Makefile takes up a width of 8
+columns or so. The length of a tab is up to the terminal being used and its
+settings.
+
+We want to know the length of each tab, and we also want to control over how to
+render tabs, so we are going to add a second string to the `erow` struct called
+`render`, which will contain the actual characters to draw on the screen for
+that row of text. We will only use `render` for tabs for now, but in the future
+it could be used to render non-printable control character such as `^` character
+followed by another character, such as `^A` for the `Ctrl-A` character (this is
+a common way to display control characters in the terminal).
+
+We may also notice that when the tab character in the `Makefile` displayed by
+the terminal, it does not erase any characters on the screen within that tab.
+All a tab does is move the cursor forward to the next tab stop, similar to a
+carriage return or newline. This is another reason why we want to render tabs as
+multiple spaces, since spaces erase whatever character was there before.
+
+So, let's start by adding `render` and `rsize` which contains the size of the
+contents of the `render` to the `erow` struct, and initializing them in
+`editorAppendRow()`, which is where new `erow`s get contructed and initialized.
