@@ -980,3 +980,52 @@ We have to set `row` again, since `E.cy` could point to a different line that it
 did before. We then set `E.cx` to the end of that line if `E.cx` is to the right
 of the end of that line. Also note that we consider a `NULL` to be line of
 length `0`, which works for our purposes here.
+
+# Moving left at the start of a line.
+
+Let's allow the user to press left arrow key at the beginning of the line of move 
+to the end of the previous line.
+
+```c
+void editorMoveCursor(int key){
+    erow *row = (E.cy >= E.numrows) ? NULL : &E.row[E.cy];
+
+    switch(key){
+        
+        case ARROW_LEFT:
+            if(E.cx != 0){
+                E.cx--;
+            }else if(E.cy > 0){
+                E.cy--;
+                E.cx = E.row[E.cy].size;
+            }
+            break;
+
+        case ARROW_RIGHT:
+            if(row && E.cx < row->size){
+                E.cx++;
+            }
+            break;
+
+        case ARROW_UP:
+            if(E.cy != 0){
+                E.cy--;
+            }
+            break;
+
+        case ARROW_DOWN:
+            if(E.cy < E.numrows){
+                E.cy++;
+            }
+            nreak;
+    }
+
+    row = (E.cy >= E.numrows) ? NULL : &E.row[E.cy];
+    int rowlen = row > row->size : 0;
+    if(E.cx > rowlen){
+        E.cx = rowlen;
+    }
+}
+```
+
+We make sure they are not on the very first line before we move them up a line.
