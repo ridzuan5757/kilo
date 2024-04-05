@@ -1077,3 +1077,27 @@ multiple spaces, since spaces erase whatever character was there before.
 So, let's start by adding `render` and `rsize` which contains the size of the
 contents of the `render` to the `erow` struct, and initializing them in
 `editorAppendRow()`, which is where new `erow`s get contructed and initialized.
+
+```c
+typedef struct erow{
+    int size;
+    int rsize;
+    int *chars;
+    int *render;
+} erow;
+
+void editorAppendRow(char *s, size_t len){
+    E.row = realloc(E.row, sizeof(erow) * (E.numrows + 1));
+
+    int at = E.numrows;
+    E.row[at].size = len;
+    E.row[at].chars = malloc(len + 1);
+    memcpy(E.row[at].chars, s, len);
+    E.row[at].chars[len] = '\0';
+
+    E.row[at].rsize = 0;
+    E.row[at].render = NULL;
+
+    E.numrows++;
+}
+```
