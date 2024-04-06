@@ -1101,3 +1101,139 @@ void editorAppendRow(char *s, size_t len){
     E.numrows++;
 }
 ```
+
+Next, let's make an `editorUpdateRow()` function that uses the `chars` string of
+an `erow` to fill in the contents of the `render` string. We will copy each
+character from `chars` to `render`. We would not worry about how to render tabs
+just yet.
+
+```c
+void editorUpdateRow(erow *row){
+    free(row->render);
+    row->render = mallow(row->size + 1);
+
+    int j;
+    int idx = 0;
+
+    for(j = 0; i < row->size; j++){
+        row->render[idx++] = row->chars[j];
+    }
+
+    row->render[idx] = '\0';
+    row->rsize = idx;
+}
+
+void editorAppendRow(char *s, size_t len){
+    E.row = realloc(E.row, sizeof(erow) * (E.numrows + 1));
+
+    int at = E.numrows;
+    E.row[at].size = len;
+    E.row[at].chars = malloc(len + 1);
+    memcpy(E.row[at].chars, s, len);
+    E.row[at].chars[len] = '\0';
+
+    E.row[at].rsize = 0;
+    E.row[at].render = NULL;
+    editorUpdateRow(&E.row[at]);
+
+    E.numrows++;
+}
+```
+
+After the `for` loop, `idx` contains the number of characters we copied into
+`row->render`, so we assign it to `row->rsize`. Now let's replace `chars` and
+`size` with `render` and `rsize` in `editorDrawRows()`, when we display each
+`erow`.
+
+```c
+void editorDrawRows(struct abuf *ab){
+    int y;
+    for(y = 0; y < E.screenrows; y++){
+        int filerow = y + E.rowoff;
+        if(filerow >= E.numrows){
+            if(E.numrows == 0 && y == E.screenrows / 3){
+                char welcome[80];
+                int welcomelen = snprintf(
+                    welcome,
+                    sizeof(welcome),
+                    "Kilo editor -- version %s",
+                    KILO_VERSION
+                );
+                if(welcomelen > E.screencols){
+                    welcomelen = E.screencols;
+                }
+                int padding = (E.screencols - welcomelen) / 2;
+                if(padding){
+                    abAppend(ab, "~", 1);
+                    padding--;
+                }
+                while(padding--){
+                    abAppend(ab, " ", 1);
+                }
+                abAppend(ab, welcome, welcomelen);
+            }else{
+                abAppend(ab, "~", 1);
+            }
+        }else{
+            int len = E.row[filerow].rsize - E.coloff;
+            if(len < 0){
+                len = 0;
+            }
+            if(len > E.screencols){
+                len = E.screencols;
+            }
+            abAppend(ab, &E.row[filerow].render[E.coloff], len);
+        }
+        abAppend(ab, "\x1b[K", 3);
+        if(y < E.screenrows - 1){
+            abAppend("\r\n", 2);
+        }
+    }
+}
+```
+
+Now the text viewer is displayer the characters in `render`. Let's add code to
+`editorUpdateRow()` that renders tabs as multiple space characters.
+
+```c
+void editorUpdateRow(erow *row){
+    int tabs = 0;
+    int j;
+
+    for(j = 0; j < row->size; j++){
+        if(row->chars[j] == '\t'){
+            tabs++;
+        }
+    }
+
+    free(row->render);
+    row->render = malloc(row->size + (tabs * 7) + 1);
+
+    int idx = 0;
+    for(j = 0; j < row->size ; j++){
+        if(row->chars[j] == '\t'){
+            row->render[idx++] = ' ';
+            while(idx % 8 != 0){
+                row->render[idx++] = ' ';
+            }
+        }else{
+            row->render[idx++] = row->chars[j];
+        }
+    }
+    row->render[idx] = '\0';
+    row->rsize = idx;
+}
+```
+
+First, we have to loop through the `chars` of the row and count the tabs in
+order to know how much memory to allocate for `render`. The maximum number of
+characters needed for each tab is 8. `row->size` already counts 1 for each tab,
+so we multiple the number of tabs by 7 and add that to `row->size` to get the
+maximum amount of memory we will need for the needed row.
+
+After allocating the memory, we modify the `for` loop to check whether the
+current character is a tab. If it is, we append one space (because each tab must
+advance the cursor forward at least one column), and then append spaces until we
+get to a tab stop, which is a column that is divisible by 8;
+
+At this point, we should probably make the length of a tab stop a constant.
