@@ -807,4 +807,469 @@ void editorScroll(){
 }
 ```
 
+As we can see, it is exactly parallel to the vertical scrolling code. We just
+replace `E.cy` with `E.cx`, `E.rowoff` with `E.coloff`, and `E.screenrows` with
+`E.screencols`. Now let's allow the user to scroll past the right edge of the
+screen.
 
+```c
+void editorMoveCursor(int key){
+    switch(key){
+        
+        case ARROW_LEFT:
+            if(E.cx != 0){
+                E.cx--;
+            }
+            break;
+
+        case ARROW_RIGHT:
+            E.cx++;
+            break;
+
+        case ARROW_UP:
+            if(E.cy != 0){
+                E.cy--;
+            }
+            break;
+
+        case ARROW_DOWN:
+            if(E.cy < E.numrows){
+                E.cy++;
+            }
+            break;
+    }
+}
+```
+
+We should be able to confirm that horizontal scrolling now works. Let's now fix
+the cursor positioning, just like we did for vertical scrolling.
+
+```c
+void editorRefreshScreen(){
+    editorScroll();
+
+    struct abuf ab = ABUF_INIT;
+
+    abAppend(&ab, "\x1b[?25l", 6);
+    abAppend(&ab, "\x1b[H", 3);
+
+    editorDrawRows(&ab);
+
+    char buf[32];
+    snprintf(
+        buf,
+        sizeof(buf),
+        "\x1b[%d;%dH",
+        (E.cy - E.rowoff) + 1,
+        (E.cx - E.coloff) + 1
+    );
+    abAppend(&ab, buf, strlen(buf));
+
+    abAppend(&ab, "\x1b[?25h", 6);
+
+    write(STDOUT_FILENO, ab.b, ab.len);
+    abFree(&ab);
+}
+```
+
+# Right-side scroll limit.
+
+Now, both `E.cx` and `E.cy` refer to the cursor's position within the file, not
+its position on the screen. So our goal with the next few steps is to limit the
+values of `E.cx` and `E.cy` to only ever point to valid position in the file.
+Otherwise, the user could move the cursor way off to the right of a line and
+start inserting text there, which would not make much sense.
+
+The only exception to this rule are that `E.cx` can point one character past the
+end of a line so that characters can be inserted at the end of the line, and
+`E.cy` can point one line past the end of the file so that new lines at the end
+of the line can be added easily.
+
+Let's start by not allowing the user to scroll past the end of the current line.
+
+```c
+void editorMoveCursor(int key){
+    erow *row = (E.cy >= E.numrows) ? NULL : &E.row[E.cy];
+
+    switch(key){
+        
+        case ARROW_LEFT:
+            if(E.cx != 0){
+                E.cx--;
+            }
+            break;
+
+        case ARROW_RIGHT:
+            if(row && E.cx < row->size){
+                E.cx++;
+            }
+            break;
+
+        case ARROW_UP:
+            if(E.cy != 0){
+                E.cy--;
+            }
+            break;
+
+        case ARROW_DOWN:
+            if(E.cy < E.numrows){
+                E.cy++;
+            }
+            break;
+    }
+}
+```
+
+Since `E.cy` is allowed to be one past the line of the file, we use the ternary
+operator to check if the cursor is on an actual line. If it is, then the `row`
+variable will point to the `erow` that the cursor is on, and we will check
+whether `E.cx` is to the left of the end of that line before we allow the cursor
+to move to the right.
+
+# Snap cursor to the end of line.
+
+The user is however still able to move the cursor past the end of a line. They
+can do it by moving the cursor to the end of a long line, then moving it down to
+the next line that happens to be shorter than the current line. The `E.cx` value
+won't change, and the cursor will be off to the right of the end of the line it
+is now on.
+
+Let's add some code to `editorMoveCursor()` that corrects `E.cx` if it ends up
+past the end of the line it is on.
+
+```c
+void editorMoveCursor(int key){
+    erow *row = (E.cy >= E.numrows) ? NULL : &E.row[E.cy];
+
+    switch(key){
+        
+        case ARROW_LEFT:
+            if(E.cx != 0){
+                E.cx--;
+            }
+            break;
+
+        case ARROW_RIGHT:
+            if(row && E.cx < row->size){
+                E.cx++;
+            }
+            break;
+
+        case ARROW_UP:
+            if(E.cy != 0){
+                E.cy--;
+            }
+            break;
+
+        case ARROW_DOWN:
+            if(E.cy < E.numrows){
+                E.cy++;
+            }
+            break;
+    }
+
+    row = (E.cy >= E.numrows) ? NULL : &E.row[E.cy];
+    int rowlen = row ? row->size : 0;
+    if(E.cx > rowlen){
+        E.cx = rowlen;
+    }
+}
+```
+
+We have to set `row` again, since `E.cy` could point to a different line that it
+did before. We then set `E.cx` to the end of that line if `E.cx` is to the right
+of the end of that line. Also note that we consider a `NULL` to be line of
+length `0`, which works for our purposes here.
+
+# Moving left at the start of a line.
+
+Let's allow the user to press left arrow key at the beginning of the line of move 
+to the end of the previous line.
+
+```c
+void editorMoveCursor(int key){
+    erow *row = (E.cy >= E.numrows) ? NULL : &E.row[E.cy];
+
+    switch(key){
+        
+        case ARROW_LEFT:
+            if(E.cx != 0){
+                E.cx--;
+            }else if(E.cy > 0){
+                E.cy--;
+                E.cx = E.row[E.cy].size;
+            }
+            break;
+
+        case ARROW_RIGHT:
+            if(row && E.cx < row->size){
+                E.cx++;
+            }
+            break;
+
+        case ARROW_UP:
+            if(E.cy != 0){
+                E.cy--;
+            }
+            break;
+
+        case ARROW_DOWN:
+            if(E.cy < E.numrows){
+                E.cy++;
+            }
+            nreak;
+    }
+
+    row = (E.cy >= E.numrows) ? NULL : &E.row[E.cy];
+    int rowlen = row > row->size : 0;
+    if(E.cx > rowlen){
+        E.cx = rowlen;
+    }
+}
+```
+
+We make sure they are not on the very first line before we move them up a line.
+
+# Moving right at the end of a lines
+
+Similarly let's allow the user to press right key at the end of a line to go to
+the beginning of the next line.
+
+```c
+void editorMoveCursor(int key){
+    switch(key){
+        case ARROW_RIGHT:
+            if(row && E.cx < row->size){
+                E.cx++;
+            }else if(row && E.cx == row->size){
+                E.cy++;
+                E.cx = 0;
+            }
+            break;
+    }
+}
+```
+
+Here we have to make sure they are not at the end of the file before moving down
+a line.
+
+# Tabs rendering
+
+If we try opening the `Makefile` using `./kilo Makefile`, we will notice that
+the tab character on the second line of the Makefile takes up a width of 8
+columns or so. The length of a tab is up to the terminal being used and its
+settings.
+
+We want to know the length of each tab, and we also want to control over how to
+render tabs, so we are going to add a second string to the `erow` struct called
+`render`, which will contain the actual characters to draw on the screen for
+that row of text. We will only use `render` for tabs for now, but in the future
+it could be used to render non-printable control character such as `^` character
+followed by another character, such as `^A` for the `Ctrl-A` character (this is
+a common way to display control characters in the terminal).
+
+We may also notice that when the tab character in the `Makefile` displayed by
+the terminal, it does not erase any characters on the screen within that tab.
+All a tab does is move the cursor forward to the next tab stop, similar to a
+carriage return or newline. This is another reason why we want to render tabs as
+multiple spaces, since spaces erase whatever character was there before.
+
+So, let's start by adding `render` and `rsize` which contains the size of the
+contents of the `render` to the `erow` struct, and initializing them in
+`editorAppendRow()`, which is where new `erow`s get contructed and initialized.
+
+```c
+typedef struct erow{
+    int size;
+    int rsize;
+    int *chars;
+    int *render;
+} erow;
+
+void editorAppendRow(char *s, size_t len){
+    E.row = realloc(E.row, sizeof(erow) * (E.numrows + 1));
+
+    int at = E.numrows;
+    E.row[at].size = len;
+    E.row[at].chars = malloc(len + 1);
+    memcpy(E.row[at].chars, s, len);
+    E.row[at].chars[len] = '\0';
+
+    E.row[at].rsize = 0;
+    E.row[at].render = NULL;
+
+    E.numrows++;
+}
+```
+
+Next, let's make an `editorUpdateRow()` function that uses the `chars` string of
+an `erow` to fill in the contents of the `render` string. We will copy each
+character from `chars` to `render`. We would not worry about how to render tabs
+just yet.
+
+```c
+void editorUpdateRow(erow *row){
+    free(row->render);
+    row->render = mallow(row->size + 1);
+
+    int j;
+    int idx = 0;
+
+    for(j = 0; i < row->size; j++){
+        row->render[idx++] = row->chars[j];
+    }
+
+    row->render[idx] = '\0';
+    row->rsize = idx;
+}
+
+void editorAppendRow(char *s, size_t len){
+    E.row = realloc(E.row, sizeof(erow) * (E.numrows + 1));
+
+    int at = E.numrows;
+    E.row[at].size = len;
+    E.row[at].chars = malloc(len + 1);
+    memcpy(E.row[at].chars, s, len);
+    E.row[at].chars[len] = '\0';
+
+    E.row[at].rsize = 0;
+    E.row[at].render = NULL;
+    editorUpdateRow(&E.row[at]);
+
+    E.numrows++;
+}
+```
+
+After the `for` loop, `idx` contains the number of characters we copied into
+`row->render`, so we assign it to `row->rsize`. Now let's replace `chars` and
+`size` with `render` and `rsize` in `editorDrawRows()`, when we display each
+`erow`.
+
+```c
+void editorDrawRows(struct abuf *ab){
+    int y;
+    for(y = 0; y < E.screenrows; y++){
+        int filerow = y + E.rowoff;
+        if(filerow >= E.numrows){
+            if(E.numrows == 0 && y == E.screenrows / 3){
+                char welcome[80];
+                int welcomelen = snprintf(
+                    welcome,
+                    sizeof(welcome),
+                    "Kilo editor -- version %s",
+                    KILO_VERSION
+                );
+                if(welcomelen > E.screencols){
+                    welcomelen = E.screencols;
+                }
+                int padding = (E.screencols - welcomelen) / 2;
+                if(padding){
+                    abAppend(ab, "~", 1);
+                    padding--;
+                }
+                while(padding--){
+                    abAppend(ab, " ", 1);
+                }
+                abAppend(ab, welcome, welcomelen);
+            }else{
+                abAppend(ab, "~", 1);
+            }
+        }else{
+            int len = E.row[filerow].rsize - E.coloff;
+            if(len < 0){
+                len = 0;
+            }
+            if(len > E.screencols){
+                len = E.screencols;
+            }
+            abAppend(ab, &E.row[filerow].render[E.coloff], len);
+        }
+        abAppend(ab, "\x1b[K", 3);
+        if(y < E.screenrows - 1){
+            abAppend("\r\n", 2);
+        }
+    }
+}
+```
+
+Now the text viewer is displayer the characters in `render`. Let's add code to
+`editorUpdateRow()` that renders tabs as multiple space characters.
+
+```c
+void editorUpdateRow(erow *row){
+    int tabs = 0;
+    int j;
+
+    for(j = 0; j < row->size; j++){
+        if(row->chars[j] == '\t'){
+            tabs++;
+        }
+    }
+
+    free(row->render);
+    row->render = malloc(row->size + (tabs * 7) + 1);
+
+    int idx = 0;
+    for(j = 0; j < row->size ; j++){
+        if(row->chars[j] == '\t'){
+            row->render[idx++] = ' ';
+            while(idx % 8 != 0){
+                row->render[idx++] = ' ';
+            }
+        }else{
+            row->render[idx++] = row->chars[j];
+        }
+    }
+    row->render[idx] = '\0';
+    row->rsize = idx;
+}
+```
+
+First, we have to loop through the `chars` of the row and count the tabs in
+order to know how much memory to allocate for `render`. The maximum number of
+characters needed for each tab is 8. `row->size` already counts 1 for each tab,
+so we multiple the number of tabs by 7 and add that to `row->size` to get the
+maximum amount of memory we will need for the needed row.
+
+After allocating the memory, we modify the `for` loop to check whether the
+current character is a tab. If it is, we append one space (because each tab must
+advance the cursor forward at least one column), and then append spaces until we
+get to a tab stop, which is a column that is divisible by 8;
+
+At this point, we should probably make the length of a tab stop a constant.
+
+```c
+#define KILO_TAB_STOP 8
+
+void editorUpdateRow(erow *row){
+    int tabs = 0;
+    int j;
+
+    for(j = 0; j < row->size; j++){
+        if(row->chars[j] == '\t'){
+            tabs++;
+        }
+    }
+
+    free(row->render);
+    row->render = malloc(row->size + tabs*(KILO_TAB_STOP - 1) + 1);
+
+    int idx = 0;
+    for(j = 0; j < row->size; j++){
+        if(row->chars[j] == '\t'){
+            row->render[idx++] = ' ';
+
+            while(idx % KILO_TAB_STOP != 0){
+                row->render[idx++] = ' ';
+            }
+        }else{
+            row->render[idx++] = row->chars[j];
+        }
+    }
+
+    row->render[idx] = '\0';
+    row->rsize = idx;
+}
+```
+
+This makes the code clearer, and also makes the tab stop length configurable.
